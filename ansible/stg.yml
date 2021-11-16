@@ -1,7 +1,7 @@
 ---
 - ansible.builtin.import_playbook: playbooks/check_ansible_version.yml
 
-- ansible.builtin.import_playbook: playbooks/common.yml
+- ansible.builtin.import_playbook: playbooks/stgcommon.yml
 - ansible.builtin.import_playbook: playbooks/stgdb.yml
 - ansible.builtin.import_playbook: playbooks/stgweb.yml
 
