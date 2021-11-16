@@ -1,0 +1,29 @@
+---
+- name: postmap generic
+  tags: postfix
+  become: true
+  command: |
+    postmap "{{ postfix_parameters.smtp_generic_maps.split(':')[0] }}:/etc/postfix/generic"
+  when: postfix_parameters.smtp_generic_maps.split(':')[0] in postfix_databases
+
+- name: postmap sasl_passwd
+  tags: postfix
+  become: true
+  command: |
+    postmap "{{ postfix_parameters.smtp_sasl_password_maps.split(':')[0] }}:/etc/postfix/sasl_passwd"
+  when: postfix_parameters.smtp_sasl_password_maps.split(':')[0] in postfix_databases
+
+- name: postmap sender_canonical
+  tags: postfix
+  become: true
+  command: |
+    postmap "{{ postfix_parameters.sender_canonical_maps.split(':')[0] }}:/etc/postfix/sender_canonical"
+  when: postfix_parameters.sender_canonical_maps.split(':')[0] in postfix_databases
+
+- name: restart postfix
+  tags: postfix
+  become: true
+  service:
+    name: postfix
+    state: restarted
+...

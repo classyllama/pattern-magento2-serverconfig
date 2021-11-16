@@ -1,0 +1,93 @@
+---
+
+- name: set fact percona_server_package percona_client_package (<= v5.7)
+  set_fact: 
+    percona_server_package: "Percona-Server-server-{{ percona_version }}"
+    percona_client_package: "Percona-Server-client-{{ percona_version }}"
+  when: percona_version == 56 or percona_version == 57
+
+- name: set fact percona_server_package percona_client_package (> v5.7)
+  set_fact: 
+    percona_server_package: "percona-server-server"
+    percona_client_package: "percona-server-client"
+  when: percona_version != 56 and percona_version != 57
+
+- debug:
+    var: percona_server_package
+- debug:
+    var: percona_client_package
+
+- name: Install Percona Client/Server
+  package:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - "{{ percona_server_package }}"
+    - "{{ percona_client_package }}"
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Check for existing datadir
+  stat: 
+    path: "{{ mysqld_datadir }}"
+  register: mysqld_datadir_stat
+- set_fact:
+    mysqld_existing_datadir: yes
+  when: mysqld_datadir != mysqld_default_datadir and mysqld_datadir_stat.stat.exists
+
+- name: Check for existing tmpdir
+  stat: 
+    path: "{{ mysqld_tmpdir }}"
+  register: mysqld_tmpdir_stat
+
+- name: create mysqld tmpdir
+  file:
+    path: "{{ mysqld_tmpdir }}"
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: 0775
+  when: mysqld_create_tmpdir or not mysqld_tmpdir_stat.stat.exists
+
+- name: fail without mysqld_server_id when replication is enabled
+  fail: msg="mysqld_server_id must be set when replication is enabled"
+  when:
+    - mysqld_server_id is none
+    - (mysqld_replication_master or mysqld_replication_slave)
+
+- name: fail when mysqld_replication_master and mysqld_replication_slave are both yes
+  fail: msg="mysqld_replication_master and mysqld_replication_slave cannot both be yes"
+  when: mysqld_replication_master and mysqld_replication_slave
+
+- name: configure mysqld
+  template:
+    src: my.cnf
+    dest: /etc/my.cnf
+    owner: root
+    group: root
+    mode: 0644
+    backup: yes
+  notify: restart mysql
+
+- name: Check for existing log dir
+  stat: 
+    path: "{{ mysqld_log_dir }}"
+  register: mysqld_log_dir_stat
+
+- name: create mysqld tmpdir
+  file:
+    path: "{{ mysqld_log_dir }}"
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: 0775
+  when: not mysqld_log_dir_stat.stat.exists
+
+- name: start mysql service
+  service:
+    name: mysql
+    state: started
+    enabled: yes
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- import_tasks: root_user_setup.yml
+- import_tasks: user_check.yml

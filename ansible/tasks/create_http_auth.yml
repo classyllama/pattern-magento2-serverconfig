@@ -1,0 +1,52 @@
+---
+- set_fact:
+    http_auth_user: "{{ http_auth_user | default('data') }}"
+    http_auth_json_file: "{{ http_auth_json_file | default('/var/www/data/http_auth.json') }}"
+    htpasswd_file: "{{ htpasswd_file | default('/etc/nginx/.htpasswd') }}"
+    http_auth_pass: "{{ http_auth_pass | default('') }}"
+
+- name: Get http_auth_json status
+  stat:
+    path: "{{ http_auth_json_file }}"
+  register: http_auth_json
+
+- name: Create HTTP Auth file
+  block:
+    
+    - name: Generate random two word passphrase
+      shell: WORDS=2; LC_ALL=C grep -x '[a-z]*' /usr/share/dict/words | egrep '^[a-z.]{4,}$' | shuf --random-source=/dev/urandom -n ${WORDS} | paste -sd '-'
+      register: http_auth_pass_gen
+      changed_when: false
+      check_mode: no
+    
+    - set_fact:
+        http_auth_pass_used: "{{ http_auth_pass or http_auth_pass_gen.stdout }}"
+    
+    - debug:
+        var: http_auth_pass
+    
+    - debug:
+        var: http_auth_pass_gen
+    
+    - debug:
+        var: http_auth_pass_used
+    
+    - name: Write HTTP Auth JSON file
+      copy:
+        content: "{\"user\": \"{{ http_auth_user }}\", \"pass\": \"{{ http_auth_pass_used }}\"}"
+        dest: "{{ http_auth_json_file }}"
+  
+  # Block Conditional
+  when: http_auth_json.stat.exists == false
+
+- name: Read HTTP Auth Pass
+  shell: cat /var/www/data/http_auth.json | jq --raw-output .pass
+  register: http_auth_file_pass
+  changed_when: false
+  check_mode: no
+
+- name: generate .htpasswd file
+  shell: "htpasswd -c -b {{ htpasswd_file }} {{ http_auth_user }} '{{ http_auth_file_pass.stdout }}'"
+  args:
+    creates: "{{ htpasswd_file }}"
+  notify: reload nginx

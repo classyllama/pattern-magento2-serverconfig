@@ -1,0 +1,431 @@
+---
+# Example Vars:
+# 
+# Make sure configs are set in group vars for sshd_additional_config_lines
+# 
+# sshd_sftp_subsystem: internal-sftp -m 660
+# sshd_additional_config_lines:
+#   - "Match group sftp_only"
+#   - "  ChrootDirectory             /home/%u"
+#   - "  X11Forwarding               no"
+#   - "  AllowTcpForwarding          no"
+#   - "  ForceCommand                internal-sftp -m 660"
+#   - "  PasswordAuthentication      yes"
+
+
+# Example Include:
+# - hosts: xzy-xzy
+#   name: Setup Jailed SFTP accounts
+#   gather_facts: no
+#   become: true
+#
+#   tasks:
+#     # Create Jailed SFTP users
+#     - name: Create Jailed SFTP User for Access (USERNAMEHERE)
+#       include_tasks: tasks/create-sftp-matched_user.yml
+#       vars:
+#         sftp_user_name: USERNAMEHERE
+#         sftp_user_password_file: /root/sftp_USERNAMEHERE_pass.txt
+#         sftp_user_match_user: { name: www-data } # { id: 5000, name: www-data }
+#         sftp_user_match_group: { name: www-data } # { id: 5000, name: www-data }
+#         sftp_sshd_access_group: sshusers
+#         sftp_sshd_sftp_group: sftp_only
+#         sftp_user_additional_groups:
+#           - sshusers
+#           - sftp_only
+#         sftp_path_mapping: # Do not put trailing slashes on paths
+#           - { jailed_path: /sites/data/var/importexport, mount_dest: /var/www/html/shared/var/importexport }
+
+
+
+
+# Testing
+# Upload a file and check the file permissions
+# 
+# USER="user_name"
+# HOST="1.2.3.4"
+# LOCAL_FILE="testfile.txt"
+# REMOTE_PATH="/sites/data/var/importexport/"
+#
+# echo "testing 123" > ${LOCAL_FILE}
+#
+# sftp ${USER}@${HOST}:${REMOTE_PATH} <<< "put ${LOCAL_FILE}"
+# sftp ${USER}@${HOST} <<< "ls -l ${REMOTE_PATH}"
+# sftp ${USER}@${HOST} <<< "rm ${REMOTE_PATH}${LOCAL_FILE}"
+# sftp ${USER}@${HOST} <<< "mkdir testdir"
+# sftp ${USER}@${HOST}:${REMOTE_PATH}testdir <<< "put ${LOCAL_FILE}"
+# sftp ${USER}@${HOST} <<< "ls -l ${REMOTE_PATH}testdir"
+# sftp ${USER}@${HOST} <<< "rm ${REMOTE_PATH}testdir/${LOCAL_FILE}"
+# sftp ${USER}@${HOST} <<< "rmdir testdir"
+#
+# echo "sftp ${USER}@${HOST}"
+# echo "put ${LOCAL_FILE}"
+# echo "ls -l ${REMOTE_PATH}"
+# echo "rm ${REMOTE_PATH}${LOCAL_FILE}"
+# echo "mkdir testdir"
+# echo "cd testdir"
+# echo "put ${LOCAL_FILE}"
+# echo "ls -l ${REMOTE_PATH}testdir"
+# echo "rm ${REMOTE_PATH}testdir/${LOCAL_FILE}"
+# echo "rmdir testdir"
+
+
+
+
+# Check global variable Requirements
+- fail:
+    msg: "ERROR: Make sure configs are set in group vars for sshd_additional_config_lines."
+  when: ('Match group ' + sftp_sshd_sftp_group) not in sshd_additional_config_lines
+
+# Required variables passed into task
+- fail:
+    msg: "ERROR: Make sure sftp_user_name is specified."
+  when: sftp_user_name|length < 1
+- fail:
+    msg: "ERROR: Make sure sftp_user_password_file is specified."
+  when: sftp_user_password_file|length < 1
+- fail:
+    msg: "ERROR: Make sure sftp_user_match_user is specified."
+  when: sftp_user_match_user|length < 1
+- fail:
+    msg: "ERROR: Make sure sftp_user_match_group is specified."
+  when: sftp_user_match_group|length < 1
+- fail:
+    msg: "ERROR: Make sure sftp_sshd_access_group is specified."
+  when: sftp_sshd_access_group|length < 1
+- fail:
+    msg: "ERROR: Make sure sftp_sshd_sftp_group is specified."
+  when: sftp_sshd_sftp_group|length < 1
+- fail:
+    msg: "ERROR: Make sure sftp_user_additional_groups is specified."
+  when: sftp_user_additional_groups|length < 1
+- fail:
+    msg: "ERROR: Make sure sftp_path_mapping is specified."
+  when: sftp_path_mapping|length < 1
+
+
+
+
+
+
+
+
+# Check for group existance and matching
+- name: use gentent to get all group entities
+  getent: 
+    database: group
+
+- name: "Check groups for {{ sftp_user_match_group.name }} name or {{ sftp_user_match_group.id }} gid"
+  set_fact:
+    filtered_groups: "{{ filtered_groups|default({}) | combine( {item: getent_group[item][1]} ) }}"
+  when: 
+    getent_group[item] is defined 
+    and 
+    (
+      (sftp_user_match_group.id is defined and getent_group[item][1] == sftp_user_match_group.id)
+      or
+      (sftp_user_match_group.name is defined and item == sftp_user_match_group.name)
+    )
+  with_items:
+    - "{{ getent_group | list }}"
+  loop_control:
+      label: "{{ item }}: {{ getent_group[item]|join(', ') }}"
+  ignore_errors: '{{ ansible_check_mode }}'
+
+- name: Define defaults
+  set_fact:
+    group_name_exists: false
+    group_id_exists: false
+    group_name_with_id_exists: false
+
+- name: Set group_name_exists if group name exists
+  set_fact:
+    group_name_exists: true
+    use_gid: "{{ getent_group[sftp_user_match_group.name][1]|int }}"
+    use_group_name: "{{ sftp_user_match_group.name }}"
+  when: 
+    - filtered_groups is defined
+    - sftp_user_match_group.name is defined
+    - filtered_groups|select('equalto', sftp_user_match_group.name)|list|count > 0
+- name: Set group_id_exists if group id exists
+  set_fact:
+    group_id_exists: true
+    use_gid: "{{ item.value|int }}"
+    use_group_name: "{{ item.key }}"
+  when: 
+    - filtered_groups is defined
+    - sftp_user_match_group.id is defined
+    - item.value|int == sftp_user_match_group.id|int
+  with_dict: "{{ filtered_groups }}"
+- name: Set group_name_with_id_exists if group exists with the specified id
+  set_fact:
+    group_name_with_id_exists: true
+    use_gid: "{{ item.value|int }}"
+    use_group_name: "{{ item.key }}"
+  when: 
+    - filtered_groups is defined
+    - sftp_user_match_group.name is defined and sftp_user_match_group.id is defined
+    - item.value|int == sftp_user_match_group.id|int
+    - item.key == sftp_user_match_group.name
+  with_dict: "{{ filtered_groups }}"
+
+# Checks for existance matching errors
+- fail: 
+    msg: "{{ sftp_user_match_group.name }} name and {{ sftp_user_match_group.id }} gid were specified but does not exist"
+  when: 
+    - sftp_user_match_group.name is defined and sftp_user_match_group.id is defined
+    - not group_name_with_id_exists
+- fail: 
+    msg: "{{ sftp_user_match_group.name }} name was specified but does not exist"
+  when: 
+    - sftp_user_match_group.name is defined and sftp_user_match_group.id is not defined
+    - not group_name_exists
+- fail: 
+    msg: "{{ sftp_user_match_group.id }} gid was specified but does not exist"
+  when: 
+    - sftp_user_match_group.name is not defined and sftp_user_match_group.id is defined
+    - not group_id_exists
+- fail: 
+    msg: "use_gid was not defined"
+  when: 
+    - not use_gid is defined
+- fail: 
+    msg: "use_group_name was not defined"
+  when: 
+    - not use_group_name is defined
+
+
+
+
+
+# Check for user existance and matching
+- name: use gentent to get all user entities
+  getent: 
+    database: passwd
+
+- name: "Check users for {{ sftp_user_match_user.name }} name or {{ sftp_user_match_user.id }} uid"
+  set_fact:
+    filtered_users: "{{ filtered_users|default({}) | combine( {item: getent_passwd[item][1]} ) }}"
+  when: 
+    getent_passwd[item] is defined 
+    and 
+    (
+      (sftp_user_match_user.id is defined and getent_passwd[item][1] == sftp_user_match_user.id)
+      or
+      (sftp_user_match_user.name is defined and item == sftp_user_match_user.name)
+    )
+  with_items:
+    - "{{ getent_passwd | list }}"
+  loop_control:
+      label: "{{ item }}: {{ getent_passwd[item]|join(', ') }}"
+  ignore_errors: '{{ ansible_check_mode }}'
+
+- name: Define defaults
+  set_fact:
+    user_name_exists: false
+    user_id_exists: false
+    user_name_with_id_exists: false
+
+- name: Set user_name_exists if user name exists
+  set_fact:
+    user_name_exists: true
+    use_uid: "{{ getent_passwd[sftp_user_match_user.name][1]|int }}"
+    use_user_name: "{{ sftp_user_match_user.name }}"
+  when: 
+    - filtered_users is defined
+    - sftp_user_match_user.name is defined
+    - filtered_users|select('equalto', sftp_user_match_user.name)|list|count > 0
+- name: Set user_id_exists if user id is already in use
+  set_fact:
+    user_id_exists: true
+    use_uid: "{{ item.value|int }}"
+    use_user_name: "{{ item.key }}"
+  when: 
+    - filtered_users is defined 
+    - sftp_user_match_user.id is defined
+    - item.value|int == sftp_user_match_user.id|int
+  with_dict: "{{ filtered_users }}"
+- name: Set user_name_with_id_exists if user already exists with the correct id
+  set_fact:
+    user_name_with_id_exists: true
+    use_uid: "{{ item.value|int }}"
+    use_user_name: "{{ item.key }}"
+  when: 
+    - filtered_users is defined 
+    - sftp_user_match_user.name is defined and sftp_user_match_user.id is defined
+    - item.value|int == sftp_user_match_user.id|int
+    - item.key == sftp_user_match_user.name
+  with_dict: "{{ filtered_users }}"
+
+# Checks for existance matching errors
+- fail: 
+    msg: "{{ sftp_user_match_user.name }} name and {{ sftp_user_match_user.id }} uid were specified but does not exist"
+  when: 
+    - sftp_user_match_user.name is defined and sftp_user_match_user.id is defined
+    - not user_name_with_id_exists
+- fail: 
+    msg: "{{ sftp_user_match_user.name }} name was specified but does not exist"
+  when: 
+    - sftp_user_match_user.name is defined and sftp_user_match_user.id is not defined
+    - not user_name_exists
+- fail: 
+    msg: "{{ sftp_user_match_user.id }} uid was specified but does not exist"
+  when: 
+    - sftp_user_match_user.name is not defined and sftp_user_match_user.id is defined
+    - not user_id_exists
+- fail: 
+    msg: "use_uid was not defined"
+  when: 
+    - not use_uid is defined
+- fail: 
+    msg: "use_user_name was not defined"
+  when: 
+    - not use_user_name is defined
+
+
+
+
+
+# Check for valid sftp_path_mapping values
+- name: "Check that sftp_path_mapping contains valid jailed_path values ({{ item.jailed_path }})"
+  fail: 
+      msg: "jailed_path needs an abolsulte path that starts with a / and has one or more valid character following the /"
+  with_items: "{{ sftp_path_mapping }}"
+  when: not item.jailed_path | regex_search('^\/[a-zA-Z0-9-_]+') # starts with a / and contains 1 or more valid characters
+- name: "Check that sftp_path_mapping contains valid mount_dest values ({{ item.mount_dest }})"
+  fail: 
+      msg: "mount_dest needs an abolsulte path that starts with a / and has one or more valid character following the /"
+  with_items: "{{ sftp_path_mapping }}"
+  when: not item.mount_dest | regex_search('^\/[a-zA-Z0-9-_]+') # starts with a / and contains 1 or more valid characters
+
+
+
+
+
+# Get password from file
+- name: checking sftp password file
+  command: cat "{{ sftp_user_password_file }}"
+  register: pw_result
+  failed_when: false
+  changed_when: false
+  check_mode: no
+  no_log: true
+
+# Create group for sshd sftp restrictions
+- name: "create group {{ sftp_sshd_sftp_group }}"
+  group:
+    name: "{{ sftp_sshd_sftp_group }}"
+    state: present
+
+- name: sftp_user_name
+  debug:
+    var: sftp_user_name
+- name: use_uid
+  debug:
+    var: use_uid
+- name: use_group_name
+  debug:
+    var: use_group_name
+- name: sftp_user_additional_groups
+  debug:
+    var: sftp_user_additional_groups
+- name: pw_result
+  debug:
+    var: pw_result
+- name: pw_result.stdout|password_hash('sha512')
+  debug:
+    var: pw_result.stdout|password_hash('sha512')
+
+# Create user with specified matching uid and gid
+- name: "Create SFTP user {{ sftp_user_name }}"
+  user:
+    name: "{{ sftp_user_name }}"
+    uid: "{{ use_uid|int }}"
+    group: "{{ use_group_name }}"
+    groups: "{{ sftp_user_additional_groups | join(',') }}"
+    home: "/home/{{ sftp_user_name }}"
+    append: no
+    non_unique: yes
+    shell: /sbin/nologin
+    generate_ssh_key: no
+    password: "{{ pw_result.stdout|password_hash('sha512') }}"
+    update_password: on_create
+
+# Update created_users file
+- name: update /root/created_users.txt [user]
+  ini_file:
+    dest: "/root/created_users.txt"
+    section: user
+    option: "{{ sftp_user_name }}"
+    value: "{{ pw_result.stdout }}"
+    owner: root
+    group: root
+    mode: 0600
+  no_log: true
+
+# Remove default profile files
+- file:
+    path: "/home/{{ sftp_user_name }}/{{ item }}"
+    state: absent
+  with_items: 
+      - ".bash_logout"
+      - ".bash_profile"
+      - ".bashrc"
+      - ".kshrc"
+      - ".mkshrc"
+      - ".emacs"
+
+# change permissions of home directory for supporting SSH ChrootDirectory
+- name: home directory permissions
+  file:
+    path: "/home/{{ sftp_user_name }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+
+
+
+
+
+
+
+
+
+
+
+# Extract list of mounted paths
+- set_fact: 
+    ansible_mounts_list: "{{ hostvars[inventory_hostname]|json_query('ansible_mounts[*].mount') }}"
+
+# directories for bind end points
+- name: "Bind End Point /home/{{ sftp_user_name }}{{ item.jailed_path }}"
+  file:
+    path: "/home/{{ sftp_user_name }}{{ item.jailed_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  with_items: "{{ sftp_path_mapping }}"
+  when: ('/home/' + sftp_user_name + item.jailed_path) not in ansible_mounts_list
+
+# make sure target directories exist
+- name: "Target {{ item.mount_dest }}"
+  file:
+    path: "{{ item.mount_dest }}"
+    state: directory
+    recurse: no
+    owner: "{{ use_user_name }}"
+    group: "{{ use_group_name }}"
+  with_items: "{{ sftp_path_mapping }}"
+
+# bind jailed path to source
+- name: Mount/Bind jailed path to destination
+  mount:
+    path: "/home/{{ sftp_user_name }}{{ item.jailed_path }}"
+    src: "{{ item.mount_dest }}"
+    fstype: none
+    opts: defaults,bind
+    state: mounted
+  with_items: "{{ sftp_path_mapping }}"

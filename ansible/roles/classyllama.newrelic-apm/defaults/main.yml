@@ -1,0 +1,4 @@
+---
+# The newrelic apm license key must be set for the service to start
+newrelic_apm_key:
+newrelic_apm_default_appname: Undefined PHP Application

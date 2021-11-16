@@ -1,0 +1,4 @@
+# {{ ansible_managed }}
+
+# Administrative access for Systems Engineer admins
+%sysengadmins ALL=(ALL) NOPASSWD:ALL

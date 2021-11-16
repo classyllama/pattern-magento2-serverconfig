@@ -1,0 +1,69 @@
+# This task file requires the following vars be set:
+#
+# www_user_name: www-data
+# remote_composer_bin_path: /usr/local/bin/composer
+# local_composer_bin_path: composer
+
+---
+
+- set_fact:
+    remote_composer_bin_path: "{{ remote_composer_bin_path | default('/usr/local/bin/composer') }}"
+    local_composer_bin_path: "{{ local_composer_bin_path | default('composer') }}"
+  tags: magento-demo
+
+- name: Get remote composer user
+  shell: |
+    {{ remote_composer_bin_path }} config -g http-basic.repo.magento.com | jq -r '.username'
+  tags: magento-demo
+  become: yes
+  become_user: "{{ www_user_name }}"
+  register: remote_user
+  changed_when: False
+  check_mode: no
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Get remote composer password
+  shell: |
+    {{ remote_composer_bin_path }} config -g http-basic.repo.magento.com | jq -r '.password'
+  tags: magento-demo
+  become: yes
+  become_user: "{{ www_user_name }}"
+  register: remote_pass
+  changed_when: False
+  check_mode: no
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Get local composer user
+  shell: |
+    {{ local_composer_bin_path }} config -g http-basic.repo.magento.com | jq -r '.username'
+  tags: magento-demo
+  become: no
+  delegate_to: localhost
+  register: local_user
+  changed_when: False
+  when: remote_user and remote_user.stdout is defined and remote_user.stdout == ""
+  check_mode: no
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Get local composer password
+  shell: |
+    {{ local_composer_bin_path }} config -g http-basic.repo.magento.com | jq -r '.password'
+  tags: magento-demo
+  become: no
+  delegate_to: localhost
+  register: local_pass
+  changed_when: False
+  when: remote_user and remote_user.stdout is defined and remote_user.stdout == ""
+  check_mode: no
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Initialize Composer Magento Repo Auth
+  shell: |
+    {{ remote_composer_bin_path }} config -g http-basic.repo.magento.com {{ local_user.stdout }} {{ local_pass.stdout }}
+  tags: magento-demo
+  become: yes
+  become_user: "{{ www_user_name }}"
+  when: 
+    - remote_user and remote_user.stdout is defined and remote_user.stdout == ""
+    - local_user and local_user.stdout is defined and local_user.stdout != ""
+    - local_pass and local_pass.stdout is defined and local_pass.stdout != ""

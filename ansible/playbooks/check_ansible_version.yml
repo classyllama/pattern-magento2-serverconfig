@@ -1,0 +1,26 @@
+---
+- name: check ansible version
+  hosts: all # Needed instead of "localhost" when called by vagrant
+  connection: local
+  gather_facts: no
+
+  vars_files:
+    - ../vars/app_vars.default.yml
+    - ../vars/app_vars.config.yml
+  
+  tasks:
+    - name: Display Ansible Version and Requirement
+      ansible.builtin.debug:
+          msg: 
+            - Current Ansible Version {{ ansible_version.string }}
+            - Requirement is {{ ansible_version_require_min_operator }} {{ ansible_version_require_min }} and {{ ansible_version_require_max_operator }} {{ ansible_version_require_max }}
+      tags: [always]
+    
+    - name: Checking Ansible Version Requirements (skipped if requirements match)
+      when: 
+        ansible_version.string is not version(ansible_version_require_min, ansible_version_require_min_operator) or
+        ansible_version.string is not version(ansible_version_require_max, ansible_version_require_max_operator)
+      fail:
+        msg: |
+          Please use Ansible versions {{ ansible_version_require_min_operator }} {{ ansible_version_require_min }} and {{ ansible_version_require_max_operator }} {{ ansible_version_require_max }} only.
+      tags: [always]

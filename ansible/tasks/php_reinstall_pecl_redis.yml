@@ -1,0 +1,45 @@
+# https://gist.github.com/mttjohnson/935c047ba20ed6a79fa5b291e6b85455
+#
+# php -r 'echo defined("Redis::SERIALIZER_IGBINARY") ? "true" : "false";'
+# php -r 'echo defined("Redis::COMPRESSION_LZF") ? "true" : "false";'
+# php -r 'echo defined("Redis::COMPRESSION_ZSTD") ? "true" : "false";'
+# php -r 'echo defined("Redis::COMPRESSION_LZ4") ? "true" : "false";'
+
+---
+- name: Check PHP Redis for IGB Support
+  command: |
+    php -r 'echo defined("Redis::SERIALIZER_IGBINARY") ? "true" : "false";'
+  register: php_redis_igb
+  changed_when: false
+  check_mode: no
+  ignore_errors: "{{ ansible_check_mode }}"
+- name: Check PHP Redis for IGB Support
+  command: |
+    php -r 'echo defined("Redis::COMPRESSION_LZF") ? "true" : "false";'
+  register: php_redis_lzf
+  changed_when: false
+  check_mode: no
+  ignore_errors: "{{ ansible_check_mode }}"
+- name: Check PHP Redis for IGB Support
+  command: |
+    php -r 'echo defined("Redis::COMPRESSION_ZSTD") ? "true" : "false";'
+  register: php_redis_zstd
+  changed_when: false
+  check_mode: no
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- debug:
+    var: php_redis_igb
+- debug:
+    var: php_redis_lzf
+- debug:
+    var: php_redis_zstd
+
+- name: Pecl Redis Reinstall - With IGB LZF and ZSTD support
+  shell: |
+      pecl uninstall redis && printf "yes\nyes\nyes\n" | pecl install redis
+  register: pecl_redis_reinstall
+  when: php_redis_igb.stdout == 'false' or php_redis_lzf.stdout == 'false' or php_redis_zstd.stdout == 'false'
+  ignore_errors: "{{ ansible_check_mode }}"
+- debug:
+    var: pecl_redis_reinstall

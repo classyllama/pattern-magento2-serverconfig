@@ -1,0 +1,64 @@
+- name: checking id
+  command: id
+  become: false   # disable become so check retrieves id of remote user vs id of root
+  check_mode: no  # disable check_mode since this is neccessary to check remainder of playbook
+  register: check_id_result
+  changed_when: false
+
+- name: "create sshd_access_group: {{ sshd_access_group }} group"
+  group:
+    name: "{{ sshd_access_group }}"
+
+
+
+
+
+- name: Check for users in sshd_access_users and add them to access group
+  include_tasks: sshd_user_access.yml
+  vars:
+    sshd_access_user: "{{ item }}"
+  with_items: "{{ sshd_access_users }}"
+  when: ( sshd_access_users | default([]) ) | length > 0
+
+
+
+
+- name: "checking for {{ sshd_pass_auth_exception_user }} user"
+  command: "id {{ sshd_pass_auth_exception_user }}"
+  register: pass_except_user_result
+  check_mode: no  # disable check_mode since this is neccessary to check remainder of playbook
+  changed_when: false
+  failed_when: false
+  when: sshd_pass_auth_exception
+
+- block:
+  - name: "add {{ sshd_pass_auth_exception_user }} user to ssh access group"
+    user:
+      name: "{{ sshd_pass_auth_exception_user }}"
+      groups: "{{ sshd_access_group }}"
+      append: yes
+  - set_fact:
+      sshd_config_chunk_match_pass_except_user:
+        - "\nMatch user {{ sshd_pass_auth_exception_user }}"
+        - "  PasswordAuthentication yes"
+  - name: "add exception allowing {{ sshd_pass_auth_exception_user }} user to use pw auth"
+    set_fact:
+      sshd_additional_config_lines: # merge two arrays together into one array including the match pass_except rule
+        "{{ sshd_additional_config_lines|default([]) }} + {{ sshd_config_chunk_match_pass_except_user }}"
+      sshd_config_chunk_match_pass_except_user_merged: true
+    when: not sshd_config_chunk_match_pass_except_user_merged
+  # only run this block when sshd_pass_auth_exception_user user exists
+  when: ('stdout' in pass_except_user_result) and (pass_except_user_result.stdout.find(sshd_pass_auth_exception_user) != -1)
+
+- name: update sshd config
+  template:
+    src: "{{ sshd_lockdown_config_template }}"
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: 0644
+    backup: yes
+  become: true
+  notify: restart sshd
+  # only runs when ssh access group exists and current user is a member of ssh access group
+  when: ('stdout' in check_id_result) and (check_id_result.stdout.find(sshd_access_group) != -1)

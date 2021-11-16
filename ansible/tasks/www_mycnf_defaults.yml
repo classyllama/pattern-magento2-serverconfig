@@ -1,0 +1,19 @@
+# This task file requires the following vars be set:
+#
+# www_user_name: www-data
+# source_default_path: /root/data.my.cnf
+
+---
+- name: Check that the default www_user.my.cnf file exists
+  stat:
+    path: "{{ source_default_path }}"
+  tags: www-user
+  register: www_mycnf_file_stat
+
+- name: Copy a "sudoers" file on the remote machine for editing
+  ansible.builtin.copy:
+    src: "{{ source_default_path }}"
+    dest: "/home/{{ www_user_name }}/.my.cnf"
+    remote_src: yes
+  tags: www-user
+  when: www_mycnf_file_stat.stat.exists

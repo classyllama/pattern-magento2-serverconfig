@@ -1,0 +1,455 @@
+---
+# Define the supported ansible version requirements of these playbooks
+ansible_version_require_min: "2.11.3"         # Example "2.10" or "2"
+ansible_version_require_min_operator: ">="  # Example ">=" or ">"
+ansible_version_require_max: "3"            # Example "2.11" or "3"
+ansible_version_require_max_operator: "<"   # Example "<=" or "<"
+
+
+
+# --- System Configs
+client_code: EXP
+account_name: example
+
+app_domain: example.lan
+
+yum_update_and_reboot: never # (always, initial, never)
+
+use_classyllama_syseng_access: true
+use_classyllama_sshd_lockdown: false
+use_classyllama_boilerplate: true
+
+use_classyllama_hostsfile: false
+hostsfile_records:
+  - "127.0.0.1 {{ app_domain }}"
+
+use_geerlingguy_repo_epel: false
+use_classyllama_repo_ius: false # For RHEL/CentOS 7
+
+use_classyllama_timezone: false
+timezone_name: America/Chicago
+
+syseng_access_users: []
+
+use_classyllama_www_user: true
+www_user_ssh_keys: []
+www_user_list:
+  - env_name: data
+    role_vars: 
+      www_user_name: www-data
+      # www_user_uid: 5000
+      # www_user_gid: 5000
+www_user_use_default_html: false # this allows the www-data user to use /var/www/data/
+www_user_use_default_html_dirname: data # this allows the www-data user to use /var/www/data/
+
+use_www_storage_separate: true
+www_storage_dir: /data/www
+www_storage_separate_list:
+  - env_name: data
+    user_name: www-data
+    user_group: www-data
+
+use_www_mycnf_defaults: true
+www_mycnf_list:
+  - env_name: data
+    task_vars:
+      www_user_name: www-data
+      source_default_path: /root/data.my.cnf
+
+use_kamaln7_swapfile: false
+swapfile_location: /var/swap.1
+swapfile_size: 2048
+swapfile_swappiness: 10
+swapfile_use_dd: true
+
+use_classyllama_python: true
+use_classyllama_repo_python_appstream: false
+python_package_name: python # CentOS 7 uses Python 2.7
+python_software_packages: 
+  - "{{ python_package_name }}"
+  - "{{ python_package_name }}-pip"
+  - "{{ python_package_name }}-devel"
+  - "MySQL-python" # Python 2.7 MySQL library package
+python_pip_packages:
+  - segno # used for generating QR Code images for setting up 2FA OTP Authentication
+
+use_linuxhq_postfix: true
+postfix_parameters:
+    # relayhost: '[smtp.sendgrid.net]:587'  # This should match the entry in the sasl_password file
+    # smtp_sasl_auth_enable: True
+    # smtp_sasl_password_maps: 'hash:/etc/postfix/sasl_passwd'
+    # smtp_sasl_security_options: noanonymous
+    smtp_tls_security_level: encrypt
+    smtp_use_tls: True
+    smtp_tls_note_starttls_offer: True
+    smtp_tls_CAfile: /etc/ssl/certs/ca-bundle.crt
+    inet_protocols: ipv4
+    mydomain: "{{ ansible_domain }}"
+    myhostname: "{{ ansible_nodename }}"
+    mynetworks_style: host
+    mynetworks:
+      - 127.0.0.0/8
+postfix_packages:
+- cyrus-sasl
+- cyrus-sasl-lib
+- cyrus-sasl-plain
+
+
+
+# --- Tech Stack (Services) Configuration
+use_classyllama_nginx: true
+use_classyllama_repo_nginx: true
+use_classyllama_repo_nginx_appstream: false
+nginx_stream_version: "1.18"
+nginx_vhosts:
+  - name: "{{ app_domain }}"
+    pool: data
+    params:
+      server_name: "{{ app_domain }}"
+      webroot: /var/www/data/current/pub
+      proxy_port: 6081
+    includes:
+      - available.d/magento2-static.conf
+nginx_backends:
+  - name: www-data
+    pool: data
+    listen: 8080
+    webroot: /var/www/data/current/pub
+    includes:
+      - default.d/nginx-status.conf
+      - available.d/realip.conf
+      - available.d/magento2.conf
+nginx_extras:
+  - { src: nginx/conf.d/default.conf,               dest: conf.d/default.conf }
+  - conf.d/map.conf
+  - available.d/realip.conf
+  - available.d/magento2-static.conf
+  - available.d/magento2.conf
+nginx_groups: [ www-data ]
+nginx_logrotate_users: [ www-data ]
+nginx_conf_auth_allow: []
+nginx_http_additional_config:
+  map_hash_bucket_size: "2048"
+nginx_diffie_hellman_bits: 2048 # Optimized this for build speed. Production environments should use 4096
+nginx_config_hsts: "max-age=63072000"
+
+use_classyllama_php_fpm: true
+use_geerlingguy_repo_remi: true
+use_classyllama_repo_php_appstream: false
+use_classyllama_repo_php_remi_modular: false
+php_version: 74
+php_enablerepo: "remi-php{{ php_version }}"
+php_package_name_extra: ""
+php_fpm_role_list:
+  - env_name: data
+    role_vars: 
+      php_fpm_pool: www-data
+      php_fpm_pm: ondemand
+      php_fpm_memory_percentage: 50
+      php_fpm_cpu_percentage: 80
+php_default_modules:
+  - bcmath
+  - cli
+  - common
+  - devel
+  - fpm
+  - gd
+  - intl
+  - json
+  - mbstring
+  # - mcrypt      # installed on 7.1 and prior
+  - sodium      # installed on 7.2 and later
+  - mysqlnd
+  - opcache
+  - pdo
+  - pecl-redis # Not required
+  - process
+  - soap
+  - xml
+  - xmlrpc
+  - pecl-zip
+  - pear # Requirement for PECL
+php_additional_modules:
+  # - xdebug
+  - pecl-imagick
+php_fpm_global_additional_ini:
+  allow_url_fopen: 'On'
+
+use_classyllama_mariadb: false
+use_classyllama_percona: true
+percona_version: 57
+mariadb_version: "10.3"
+mysqld_memory_percentage: 25
+mysqld_max_connections: 50
+mysqld_server_id: "123456890"
+#mysqld_create_tmpdir: no # Disabling tmpdir auto-creation since the tmpdir points to a symlink
+mysqld_slow_query_log: 1
+mysqld_long_query_time: 5
+mysql_databases:
+  - env: data
+    db_name: demo_data
+    user_host: "%"
+    user_name: magento_data
+    mycnf_file: /root/data.my.cnf
+
+use_elastic_elasticsearch: true
+elastic_package_dependencies: 
+  - java-11-openjdk
+es_version: 7.9.3
+es_config:
+  node.name: "node1"
+  cluster.name: "test-cluster"
+  http.host: 0.0.0.0,
+  http.port: 9200
+  transport.tcp.port: 9300
+  node.data: true
+  node.master: true
+  bootstrap.memory_lock: true
+es_heap_size: "512m"
+es_user: elasticsearch
+es_group: elasticsearch
+es_createhome: false
+es_tmp_dir: /var/lib/elasticsearchtmp
+# es_enable_xpack: false
+es_api_basic_auth_username: elastic
+es_api_basic_auth_password: changeme
+es_plugins: []
+  # - plugin: ingest-attachment
+
+use_classyllama_repo_varnish: true
+use_classyllama_varnish: true
+varnish_version: 64
+varnish_instances_list:
+  - env_name: data
+    role_vars: 
+      varnish_instance: { name: data, port: 6081, admin_port: 6082, backend_port: 8080 }
+      varnish_storage_size: 512M
+
+use_classyllama_multi_redis: true
+redis_package_name: "redis5"
+redis_enablerepo: ""
+redis_version: 50
+redis_maxmemory_default: 1gb
+redis_instances:
+  - env_name: data
+    role_vars:
+      redis_instance:
+        name: shared
+        port: 6379
+      redis_maxmemory: 768mb
+use_classyllama_multi_redis_web_slave: false
+redis_web_slave_instances: []
+  # Example:
+  # - env_name: prod
+  #   role_vars:
+  #     redis_instance:
+  #       name: prod-obj
+  #       port: 6379
+  #     redis_maxmemory: 4gb
+  #     redis_instance_config: [ { slaveof: "{{ database_hostname }} 6379" }, { slave-read-only: "yes" } ]
+
+
+
+# --- Magento Demo Configs
+use_classyllama_magento_demo: true
+magento_demo_list:
+  - env_name: data
+    owner: www-data
+    group: www-data
+    role_vars: 
+      magento_demo_hostname: "{{ app_domain }}"
+      magento_demo_env_root: /var/www/data
+      magento_demo_magento_root: /var/www/data/magento
+      magento_demo_user: www-data
+      magento_demo_group: www-data
+      magento_demo_config_overrides:
+        MAGENTO_COMPOSER_PROJECT: magento/project-community-edition
+        MAGENTO_REL_VER: 2.4.2
+        REDIS_OBJ_HOST: "localhost"
+        REDIS_OBJ_PORT: "6379"
+        REDIS_OBJ_DB: "0"
+        REDIS_SES_HOST: "localhost"
+        REDIS_SES_PORT: "6380"
+        REDIS_SES_DB: "0"
+        VARNISH_HOST: "localhost"
+        VARNISH_PORT: "6081"
+        SEARCH_ENGINE: "elasticsearch7"
+        ELASTIC_HOST: "localhost"
+        ELASTIC_PORT: "9200"
+        ELASTIC_ENABLE_AUTH: "1"
+        ELASTIC_USERNAME: "elastic"
+        ELASTIC_PASSWORD: "changeme"
+        SHOULD_SETUP_TFA: "true"
+use_magento_temp_market_creds: true
+magento_marketplace_composer_creds_list:
+  - env_name: data
+    task_vars:
+      www_user_name: www-data
+
+
+
+# --- Additional Tools Configuration
+use_imagemagick: true
+use_classyllama_n98_magerun: true
+use_classyllama_composer: true
+composer_selfupdate: false
+
+use_classyllama_php_cachetool: true
+cachetool_config_list:
+  - env_name: data
+cachetool_config:
+  - path: /home/www-data
+    adapter: fastcgi
+    fastcgi: /var/run/php-fpm/www-data.sock
+    temp_dir: /dev/shm/cachetool
+    extensions: [ opcache ]
+
+use_classyllama_dbbackup: true
+dbbackup_data_dir: /data/dbbackup
+
+use_setup_magento_crontab: true
+setup_magento_crontab_list:
+  - env_name: data
+    task_vars: 
+      crontab_user: www-data
+      crontab_path: "/var/www/data/current"
+crontab_mailto: ""
+
+use_classyllama_magento_logrotate: true
+magento_logrotate_sets:
+  - path: /var/www/data/current/var/log/*.log
+    owner: www-data
+    group: www-data
+
+use_refresh_environment_script: false
+refresh_environment_path: /var/www/data
+refresh_environment_owner: www-data
+refresh_environment_group: www-data
+refresh_environment_script_update: true
+refresh_environment_configs_update: true
+refresh_environment_script: refresh_environment.sh
+refresh_environment_configs: 
+  - refresh_default.json
+
+use_create_http_auth: true
+create_http_auth_task_vars:
+  http_auth_user: "data"
+  http_auth_json_file: "/var/www/data/http_auth.json"
+  htpasswd_file: /etc/nginx/.htpasswd
+  http_auth_pass: "{{ default_http_auth_pass | default('') }}"
+default_http_auth_user: data
+
+use_classyllama_certbot: true
+certbot_email: my_email@example.lan
+certbot_domains:
+  - "{{ app_domain }}"
+
+use_classyllama_newrelic_apm: false
+newrelic_apm_key:
+
+
+
+# --- DataDog
+use_datadog_datadog: false
+datadog_api_key: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+datadog_site: "datadoghq.com"
+
+datadog_check_nginx_domain: "{{ app_domain }}"
+
+datadog_agent_major_version: 7
+datadog_config:
+  tags:
+    - "client:{{ client_code }}"
+  hostname: "{{ inventory_hostname }}"
+  logs_enabled: false
+  process_config:
+    enabled: "true" # has to be set as a string
+    scrub_args: true
+    custom_sensitive_words: [] # Example:  ['personal_key', '*token', 'sql*', '*pass*d*']
+system_probe_config:
+  enabled: true
+datadog_additional_groups:
+  - www-logs
+  - nginx
+  - varnish
+  - elasticsearch
+  - redis
+datadog_checks:
+  process:
+    init_config:
+    instances:
+      - name: ssh
+        search_string: ['ssh', 'sshd']
+  disk:
+    init_config:
+    instances:
+      - use_mount: no
+        excluded_filesystems:
+          - tmpfs
+          - none
+          - shm
+          - nsfs
+          - netns
+          - nfs
+          - nfs4
+          - vfat
+          - cifs
+          - devtmpfs
+          - fuse.gvfsd-fuse
+          - squashfs
+  network:
+    init_config:
+    instances:
+      # Network check only supports one configured instance
+      - collect_connection_state: true
+        excluded_interfaces:
+          - lo
+          - lo0
+  nginx:
+    init_config:
+    instances:
+      - nginx_status_url: https://{{ datadog_check_nginx_domain }}/nginx_status/
+        tls_verify: false
+        tls_ignore_warning: true
+  php_fpm:
+    init_config:
+    instances:
+      - status_url: http://localhost:8080/php-status
+        ping_url: http://localhost:8080/ping
+        tags:
+          - env:data
+  varnish:
+    init_config:
+    instances:
+      - varnishstat: /usr/bin/varnishstat
+        name: data
+        tags:
+          - env:data
+  mysql:
+    init_config:
+    instances:
+      - defaults_file: /opt/datadog-agent/datadog.my.cnf
+        options:
+          replication: true
+          replication_non_blocking_status: true
+          extra_status_metrics: true
+          extra_innodb_metrics: true
+          extra_performance_metrics: true
+        tags:
+          - env:data
+  redisdb:
+    init_config:
+    instances:
+      - host: "127.0.0.1"
+        port: 6379
+        slowlog-max-len: 128
+        tags:
+          - env:data
+          - redis_name:data-obj
+
+      - host: "127.0.0.1"
+        port: 6380
+        slowlog-max-len: 128
+        tags:
+          - env:data
+          - redis_name:data-ses

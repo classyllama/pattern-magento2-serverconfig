@@ -1,0 +1,5 @@
+---
+- name: Set timezone to timezone_name
+  community.general.timezone:
+    name: "{{ timezone_name }}"
+  notify: restart crond

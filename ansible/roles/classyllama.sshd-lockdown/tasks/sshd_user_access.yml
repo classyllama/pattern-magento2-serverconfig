@@ -1,0 +1,14 @@
+---
+- name: "checking for {{ sshd_access_user }} user"
+  command: "id {{ sshd_access_user }}"
+  register: each_user_result
+  check_mode: no  # disable check_mode since this is neccessary to check remainder of playbook
+  changed_when: false
+  failed_when: false
+
+- name: "add {{ sshd_access_user }} user to ssh access group"
+  user:
+    name: "{{ sshd_access_user }}"
+    groups: "{{ sshd_access_group }}"
+    append: yes
+  when: ('stdout' in each_user_result) and (each_user_result.stdout.find(item) != -1)

@@ -1,0 +1,41 @@
+---
+- name: install packages
+  package:
+    name:
+      - ack
+      - bash-completion
+      - git
+      - htop      # requires epel-release
+      - iftop     # requires epel-release
+      - jq
+      - lsof
+      - mailx
+      - man
+      - patch
+      - perl
+      - ps_mem
+      - pv        # requires epel-release
+      - pwgen
+      - tree
+    state: present
+
+- name: installing chrony
+  package:
+    name: chrony
+    state: present
+  notify:
+    - chronyd started
+  
+- name: verify chronyd service started/enabled
+  service:
+    name: chronyd
+    state: started
+    enabled: yes
+
+- name: installing boilerplate bash profile
+  template:
+    src: profile.d/boilerplate.sh
+    dest: /etc/profile.d/boilerplate.sh
+    owner: root
+    group: root
+    mode: 0755

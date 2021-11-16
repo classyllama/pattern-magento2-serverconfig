@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+# postfix_generic_maps: {{ postfix_generic_maps|length }}
+{% if postfix_generic_maps|length > 0 %}
+
+{%   for pgm in postfix_generic_maps|sort %}
+{%     if pgm.pattern is defined and pgm.address is defined %}
+{{ pgm.pattern }}	{{ pgm.address }}
+{%     endif %}
+{%   endfor %}
+{% endif %}

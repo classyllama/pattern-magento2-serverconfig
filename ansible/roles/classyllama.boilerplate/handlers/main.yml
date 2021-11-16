@@ -1,0 +1,5 @@
+- name: chronyd started
+  service:
+    name: chronyd
+    state: started
+    enabled: yes

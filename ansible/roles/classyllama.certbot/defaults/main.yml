@@ -1,0 +1,33 @@
+---
+# certbot install parameters
+certbot_repo: https://github.com/certbot/certbot.git
+certbot_version: master
+
+# when enabling this, be aware that when certbot-auto is run via cron it will (by default) self-update, breaking this
+certbot_keep_updated: no
+
+# certbot install location (old)
+certbot_dir: /opt/certbot
+
+# location of nginx binary (this is different on older versions of *nix)
+certbot_nginx_bin: /sbin/nginx
+
+# Use a 4096 bit RSA key instead of 2048
+certbot_rsa_key_size: 4096
+
+# If true, will attempt to generate SSL certs (requires pre-configured public DNS)
+certbot_generate: false
+
+# Email address to register certificate with
+certbot_email:
+
+# List of domains to create certificates for
+certbot_domains: 
+  # - example.com
+  # - stage.example.com
+
+# Authenticate by placing a file under .well-known/acme-challenge/ in specified webroot
+certbot_webroot_path: /var/www/html/certbot
+
+# Default location of certbot's log directory (changing this only affects the crontab entry)
+certbot_logdir: /var/log/letsencrypt

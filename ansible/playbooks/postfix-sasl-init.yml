@@ -1,0 +1,63 @@
+---
+- name: Initialize Postfix
+  hosts: all
+  become: true
+
+  vars_files:
+    - ../vars/app_vars.default.yml
+    - ../vars/app_vars.config.yml
+  
+  vars:
+    postfix_sasl_path: /etc/postfix/sasl_passwd
+
+  vars_prompt:
+    - name: "postfix_test_recipient"
+      prompt: "Test Email Recipient"
+      private: no
+
+    - name: "postfix_sasl_user"
+      prompt: "Postfix User"
+      private: no
+
+    - name: "postfix_sasl_password"
+      prompt: "Postfix Password"
+      private: yes
+
+  roles:
+    - { role: linuxhq.postfix, tags: postfix }
+
+  tasks:
+    - name: Upload Postfix SASL credentials
+      copy:
+        dest: "{{ postfix_sasl_path }}"
+        content: "{{ postfix_parameters.relayhost }} {{ postfix_sasl_user }}:{{ postfix_sasl_password }}"
+        owner: root
+        group: root
+        mode: 0600
+      register: postfix_sasl_upload
+
+    - block:
+      - name: Run postmap to create sasl db
+        command: postmap "{{ postfix_sasl_path }}"
+        notify: restart postfix
+
+      # Triggers postfix restart prior to sending test email
+      - meta: flush_handlers
+
+      - name: Send test email so we can verify headers
+        shell: 'mail -s "Test email from $(hostname)" "{{ postfix_test_recipient }}" <<< "Test email. Check email headers for SMTP route use."'
+
+      - name: Sleep for 5 seconds
+        wait_for: timeout=5
+        delegate_to: localhost
+        become: no
+
+      - name: Check mailq
+        command: mailq
+        register: mailq_result
+
+      - debug:
+          var: mailq_result.stdout_lines
+        when: ('stdout_lines' in mailq_result)
+
+      when: ('changed' in postfix_sasl_upload) and (postfix_sasl_upload.changed)

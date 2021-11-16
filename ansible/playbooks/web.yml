@@ -1,0 +1,321 @@
+---
+- name: Web Role
+  hosts: web
+  become: true
+
+  vars_files:
+    - ../vars/app_vars.default.yml
+    - ../vars/app_vars.config.yml
+
+  tasks:
+    
+    # Web User - Environment Specific - Service User / Web Directory Setup
+    - ansible.builtin.include_role:
+        name: classyllama.www-user
+        apply:
+          tags:
+            - www-user
+      tags: www-user
+      vars:
+        www_user_name: "{{ www_user.role_vars.www_user_name }}"
+        www_user_uid: "{{ www_user.role_vars.www_user_uid | default(omit) }}"
+        www_user_gid: "{{ www_user.role_vars.www_user_gid | default(omit) }}"
+      loop: "{{ www_user_list }}"
+      loop_control:
+        loop_var: www_user
+      when: use_classyllama_www_user | default(false)
+    
+    # Web - Storage on Separate Volume
+    - name: Create Web Storage Directory
+      file:
+        path: "{{ www_storage_dir }}"
+        mode: 0775
+        state: directory
+      tags: www-user
+      when: use_www_storage_separate | default(false)
+    
+    - name: Setup Web Storage on Separate Volume
+      ansible.builtin.include_tasks: tasks/www_storage_separate.yml
+      tags: www-user
+      vars: 
+        www_storage_separate: "{{ each_www_storage_separate }}"
+      loop: "{{ www_storage_separate_list }}"
+      loop_control:
+        loop_var: each_www_storage_separate
+      when: use_www_storage_separate | default(false)
+    
+    # Web User - MySQL default files
+    - name: Copy MySQL default files
+      ansible.builtin.include_tasks: tasks/www_mycnf_defaults.yml
+      tags: www-user
+      vars: 
+        www_user_name: "{{ www_user.task_vars.www_user_name }}"
+        source_default_path: "{{ www_user.task_vars.source_default_path }}"
+      loop: "{{ www_mycnf_list }}"
+      loop_control:
+        loop_var: www_user
+      when: use_www_mycnf_defaults | default(false)
+    
+    
+    
+    # PHP - Global Service / Environment Specific FPM Pools
+    - ansible.builtin.include_role:
+        name: classyllama.php-fpm
+        apply:
+          tags:
+            - php-fpm
+      tags: php-fpm
+      vars: 
+        php_fpm_pool: "{{ php_fpm_role.role_vars.php_fpm_pool }}"
+        php_fpm_pm: "{{ php_fpm_role.role_vars.php_fpm_pm | default('ondemand') }}"
+        php_fpm_memory_percentage: "{{ php_fpm_role.role_vars.php_fpm_memory_percentage | default(80) }}"
+        php_fpm_cpu_percentage: "{{ php_fpm_role.role_vars.php_fpm_cpu_percentage | default(80) }}"
+      loop: '{{ php_fpm_role_list }}'
+      loop_control:
+        loop_var: php_fpm_role
+      when: use_classyllama_php_fpm | default(false)
+
+    # PHP - Environment Specific Tools
+    - ansible.builtin.import_role:
+         name: classyllama.php-cachetool
+      tags: toolchain
+      when: use_classyllama_php_cachetool | default(false)
+    - name: Link cachetool config into /var/www/<env_name> directory
+      tags: toolchain
+      file:
+        src: "/home/www-{{ each_cachetool_env.env_name }}/.cachetool.yml"
+        dest: "/var/www/{{ each_cachetool_env.env_name }}/.cachetool.yml"
+        state: link
+      loop: '{{ cachetool_config_list }}'
+      loop_control:
+        loop_var: each_cachetool_env
+      when: use_classyllama_php_cachetool | default(false)
+      ignore_errors: "{{ ansible_check_mode }}"
+    
+    # PHP - Global Tools
+    - ansible.builtin.import_role:
+         name: classyllama.composer
+      tags: toolchain
+      when: use_classyllama_composer | default(false)
+    
+    - ansible.builtin.import_role:
+         name: classyllama.n98-magerun
+      tags: toolchain
+      when: use_classyllama_n98_magerun | default(false)
+    
+    - ansible.builtin.import_tasks: tasks/php_reinstall_pecl_redis.yml
+      when: use_php_reinstall_pecl_redis | default(false)
+    
+    - ansible.builtin.import_role:
+         name: classyllama.newrelic-apm
+      tags: newrelic
+      when: use_classyllama_newrelic_apm | default(false)
+    
+    
+    
+    # Nginx - Global Service
+    - ansible.builtin.import_role:
+         name: classyllama.nginx
+      tags: nginx
+      when: use_classyllama_nginx | default(false)
+    
+    # Certbot - Global Service - Let's Encrypt Certificate Management Tool
+    - ansible.builtin.import_role:
+        name: classyllama.certbot
+      tags: certbot
+      when: use_classyllama_certbot | default(false)
+
+    # HTTP Auth Environment File Creation - creates .htpasswd files
+    - ansible.builtin.include_tasks: tasks/create_http_auth.yml
+      tags: http_auth
+      vars:
+        http_auth_user: "{{ create_http_auth_task_vars.http_auth_user }}"
+        http_auth_json_file: "{{ create_http_auth_task_vars.http_auth_json_file }}"
+        htpasswd_file: "{{ create_http_auth_task_vars.htpasswd_file }}"
+        http_auth_pass: "{{ create_http_auth_task_vars.http_auth_pass }}"
+      when: use_create_http_auth | default(false)
+    
+    
+    
+    # Varnish - Environment Specific Instances
+    - ansible.builtin.include_role:
+         name: classyllama.varnish
+      tags: varnish
+      vars:
+        varnish_instance: "{{ each_varnish_instance.role_vars.varnish_instance }}"
+        varnish_storage_size: "{{ each_varnish_instance.role_vars.varnish_storage_size }}"
+      loop: '{{ varnish_instances_list }}'
+      loop_control:
+        loop_var: each_varnish_instance
+      when: use_classyllama_varnish | default(false)
+    
+    
+    
+    # Redis - Environment Specific Instances - Web Slaves (Read Only Cache)
+    - ansible.builtin.include_role:
+         name: classyllama.multi-redis
+      tags: redis
+      vars:
+        redis_instance: 
+          name: "{{ each_instance.role_vars.redis_instance.name }}"
+          port: "{{ each_instance.role_vars.redis_instance.port }}"
+          save: "{{ each_instance.role_vars.redis_instance.save | default(false) }}"
+        redis_maxmemory: "{{ each_instance.role_vars.redis_maxmemory | default(redis_maxmemory_default) }}"
+        redis_instance_config: "{{ each_instance.role_vars.redis_instance_config | default([]) }}"
+      loop: '{{ redis_web_slave_instances }}'
+      loop_control:
+        loop_var: each_instance
+      when: use_classyllama_multi_redis_web_slave | default(false)
+    
+    
+    
+    # Email Service (Direct or Relay)
+    - ansible.builtin.import_role:
+         name: linuxhq.postfix
+      tags: postfix
+      when: use_linuxhq_postfix | default(false)
+    
+    
+    
+    # Magento Demo - Install/Uninstall Scripts
+    - ansible.builtin.include_role:
+        name: classyllama.magento-demo
+        apply:
+          tags:
+            - magento-demo
+      tags: magento-demo
+      vars:
+        magento_demo_hostname: "{{ each_magento_demo.role_vars.magento_demo_hostname }}"
+        magento_demo_env_root: "{{ each_magento_demo.role_vars.magento_demo_env_root }}"
+        magento_demo_magento_root: "{{ each_magento_demo.role_vars.magento_demo_magento_root }}"
+        magento_demo_user: "{{ each_magento_demo.role_vars.magento_demo_user }}"
+        magento_demo_group: "{{ each_magento_demo.role_vars.magento_demo_group }}"
+        magento_demo_config_overrides: "{{ each_magento_demo.role_vars.magento_demo_config_overrides }}"
+      loop: '{{ magento_demo_list }}'
+      loop_control:
+        loop_var: each_magento_demo
+      when: use_classyllama_magento_demo | default(false)
+    
+    - name: Setup Symlink of current to magento demo directory
+      tags: magento-demo
+      block:
+        - name: Check that the current path exists
+          stat:
+            path: "/var/www/{{ each_magento_demo.env_name }}/current"
+          tags: magento-demo
+          register: current_path
+          loop: '{{ magento_demo_list }}'
+          loop_control:
+            loop_var: each_magento_demo
+        
+        # Understanding looping across multiple tasks: https://gist.github.com/mttjohnson/1983e7ccd051f3c7764f248bbdee14d8
+
+        - name: Link shared directory to /data volume
+          file:
+            src: "/var/www/{{ each_magento_demo.env_name }}/magento"
+            dest: "/var/www/{{ each_magento_demo.env_name }}/current"
+            owner: "{{ each_magento_demo.owner }}"
+            group: "{{ each_magento_demo.group }}"
+            state: link
+            force: yes
+          tags: magento-demo
+          when: not (current_path.results | selectattr('each_magento_demo.env_name', '==', each_magento_demo.env_name) | map(attribute='stat.exists') | first)
+          loop: '{{ magento_demo_list }}'
+          loop_control:
+            loop_var: each_magento_demo
+      when: use_classyllama_magento_demo | default(false)
+    
+    # Magento Application Log Rotation
+    - ansible.builtin.import_role:
+         name: classyllama.magento-logrotate
+      tags: magento-demo
+      when: use_classyllama_magento_logrotate | default(false)
+    
+    # Magento Crontab Setup
+    - ansible.builtin.include_tasks: tasks/crontab-magento2.yml
+      tags: magento-demo
+      vars:
+        crontab_user: "{{ each_magento_crontab.task_vars.crontab_user }}"
+        crontab_path: "{{ each_magento_crontab.task_vars.crontab_path }}"
+        crontab_disabled: "{{ each_magento_crontab.task_vars.crontab_disabled | default(false) }}"
+      loop: '{{ setup_magento_crontab_list }}'
+      loop_control:
+        loop_var: each_magento_crontab
+      when: use_setup_magento_crontab | default(false)
+    
+    # Setup temporary Magento Marketplace composer credentials
+    - ansible.builtin.include_tasks: tasks/magento_temp_market_creds.yml
+      tags: magento-demo
+      vars:
+        www_user_name: "{{ each_cred_env.task_vars.www_user_name }}"
+      loop: '{{ magento_marketplace_composer_creds_list }}'
+      loop_control:
+        loop_var: each_cred_env
+      when: use_magento_temp_market_creds | default(false)
+    
+    # Refresh Environment Script
+    - name: Refresh Environment Script
+      tags: refresh-scripts
+      block:
+        - name: Check that if the refresh script files already exist
+          stat:
+            path: "{{ refresh_environment_path }}/{{ item }}"
+          tags: refresh-scripts
+          register: refresh_script_files
+          with_items:
+            - "{{ refresh_environment_script }}"
+        
+        - name: Check that if the refresh config files already exist
+          stat:
+            path: "{{ refresh_environment_path }}/{{ item }}"
+          tags: refresh-scripts
+          register: refresh_config_files
+          with_items: "{{ refresh_environment_configs }}"
+        
+        # Understanding looping across multiple tasks: https://gist.github.com/mttjohnson/1983e7ccd051f3c7764f248bbdee14d8
+        
+        - name: Copy refresh environment configs
+          copy:
+            src: "refresh/{{ item.item }}"
+            dest: "{{ refresh_environment_path }}/{{ item.item }}"
+            owner: "{{ refresh_environment_owner }}"
+            group: "{{ refresh_environment_group }}"
+            mode: '0600'
+          tags: refresh-scripts
+          # if the config file already exists, do not replace it or update it
+          when: refresh_environment_configs_update or not (refresh_files.results | selectattr('item', '==', item.item) | map(attribute='stat.exists') | first)
+          with_items: "{{ refresh_config_files.results }}"
+        
+        - name: Copy refresh environment scripts
+          copy:
+            src: "refresh/{{ item.item }}"
+            dest: "{{ refresh_environment_path }}/{{ item.item }}"
+            owner: "{{ refresh_environment_owner }}"
+            group: "{{ refresh_environment_group }}"
+            mode: '0750'
+          tags: refresh-scripts
+          when: refresh_environment_script_update or not (refresh_files.results | selectattr('item', '==', item.item) | map(attribute='stat.exists') | first)
+          with_items: "{{ refresh_script_files.results }}"
+      
+      when: use_refresh_environment_script | default(false)
+    
+    
+    
+    # Additional Software Packages
+    - name: Web CLI Tools (Two Factor Auth)
+      package:
+        name:
+          - oathtool
+    
+    # Install ImageMagick
+    # verify tool exists: mogrify -version
+    # For access from PHP code it requires the pecl-imagick extension
+    - name: Install ImageMagick
+      tags: toolchain
+      package: 
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - ImageMagick
+        - ImageMagick-devel
+      when: use_imagemagick | default(false)

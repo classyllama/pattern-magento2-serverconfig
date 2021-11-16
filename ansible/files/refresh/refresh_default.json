@@ -1,0 +1,75 @@
+{  
+  "NOTE": "Filename pattern refresh_env_from_env.json",
+  "NOTE": "Example: refresh_stage_from_prod.json",
+  
+  "NOTE": "This file defines the variables used in the refresh script and is intended to keep the sensetive details separate from the script executing the commands.",
+  "NOTE": "Do not include trailing slashes on directory paths.",
+  
+  "CONFIG_USE_SSH_AGENT_FORWARDING": "false",
+  
+  "SOURCE_DB_NAME": "example_prod",
+  "SOURCE_DB_HOST": "127.0.0.1",
+  "SOURCE_MAGENTO_ROOT": "/var/www/prod/current",
+  "SOURCE_DB_TABLES_TO_EXCLUDE": [
+    "cataloginventory_stock_status_idx",
+    "catalogsearch_fulltext_scope1",
+    "catalogsearch_recommendations",
+    "catalog_product_index_eav_decimal_idx",
+    "catalog_product_index_eav_idx",
+    "catalog_product_index_price_bundle_idx",
+    "catalog_product_index_price_bundle_opt_idx",
+    "catalog_product_index_price_bundle_sel_idx",
+    "catalog_product_index_price_cfg_opt_agr_idx",
+    "catalog_product_index_price_cfg_opt_idx",
+    "catalog_product_index_price_downlod_idx",
+    "catalog_product_index_price_final_idx",
+    "catalog_product_index_price_idx",
+    "catalog_product_index_price_opt_agr_idx",
+    "catalog_product_index_price_opt_idx",
+    "persistent_session",
+    "report_compared_product_index",
+    "report_event",
+    "report_compared_product_index",
+    "report_viewed_product_aggregated_daily",
+    "report_viewed_product_aggregated_monthly",
+    "report_viewed_product_aggregated_yearly",
+    "report_viewed_product_index",
+    "search_query",
+    "search_synonyms",
+    "session"
+  ],
+  "SOURCE_DIRECTORIES_TO_SYNC": [
+    {
+      "PATH": "pub/media",
+      "PATH_EXCLUSIONS": [
+        "catalog/product/cache/*",
+        "captcha/*",
+        "tmp/*"
+      ]
+    },
+    {
+      "PATH": "var/export",
+      "PATH_EXCLUSIONS": []
+    }
+  ],
+  
+  "DESTINATION_SSH_HOST": "127.0.0.1",
+  "DESTINATION_SSH_HOST_GET_PUBLIC_IP": "false",
+  "DESTINATION_SSH_HOST_USE_IP_OVERRIDE": "false",
+  "DESTINATION_SSH_HOST_IP_OVERRIDE": "10.0.0.1",
+  "DESTINATION_SSH_PORT": "",
+  "DESTINATION_SSH_USER": "www-stage",
+  "DESTINATION_DB_NAME": "example_stage",
+  "DESTINATION_DB_HOST": "127.0.0.1",
+  "DESTINATION_MAGENTO_ROOT": "/var/www/stage/current",
+  
+  "NOTE": "see https://gist.github.com/mttjohnson/b8b5a4c387b459e6f2724be34662dcf2 for encoding/escaping complex commands",
+  "DESTINATION_COMMANDS": [
+    "bin/magento -q config:set catalog/search/engine elasticsearch7",
+    "bin/magento -q cache:flush",
+    "bin/magento -q cache:clean",
+    "bin/magento -q setup:db-schema:upgrade",
+    "bin/magento -q setup:db-data:upgrade",
+    "bin/magento -q indexer:reindex"
+  ]
+}

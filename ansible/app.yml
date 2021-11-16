@@ -1,0 +1,15 @@
+---
+- ansible.builtin.import_playbook: playbooks/check_ansible_version.yml
+
+- ansible.builtin.import_playbook: playbooks/common.yml
+- ansible.builtin.import_playbook: playbooks/db.yml
+- ansible.builtin.import_playbook: playbooks/web.yml
+
+
+# - ansible.builtin.import_playbook: playbooks/temp.yml
+
+
+
+
+
+

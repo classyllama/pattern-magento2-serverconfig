@@ -1,0 +1,33 @@
+---
+# SELinux is enforced by default; this fails everything where data has been relocated to /data; eventually there
+# may be a working policy put in place that will allow this to be left on but for now disabling is required. This
+# is being done in pre_tasks so it runs before roles execute to avoid a role's handlers executing after a system
+# reboot causing potential for problems caused by system shutdown prior to handler execution.
+
+- include_vars: ../vars/disable-selinux.yml
+
+- name: disable selinux
+  become: yes
+  selinux:
+    state: disabled
+  register: selinux_disabled
+
+- name: disable selinux | asynchronous reboot
+  become: yes
+  shell: "sleep {{ reboot_server_shutdown_delay }} && shutdown -r now 'Rebooting (Disabling SELinux via Ansible)'"
+  async: 1
+  poll: 0
+  ignore_errors: False
+  changed_when: True
+  when: selinux_disabled.changed
+
+- name: disable selinux | wait for server to come back
+  become: no
+  delegate_to: "{{ reboot_server_delegate }}"
+  wait_for:
+    delay: "{{ reboot_server_wait }}"
+    host: "{{ hostvars[inventory_hostname].ansible_host | default(inventory_hostname) }}"
+    port: "{{ hostvars[inventory_hostname].ansible_port | default(22) }}"
+    state: "started"
+    timeout: "{{ reboot_server_timeout }}"
+  when: selinux_disabled.changed and "reboot_server_timeout > 0"

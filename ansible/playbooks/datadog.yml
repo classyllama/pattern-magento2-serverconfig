@@ -1,0 +1,39 @@
+---
+- name: Datadog
+  hosts: all
+  become: true
+
+  vars_files:
+    - ../vars/app_vars.default.yml
+    - ../vars/app_vars.config.yml
+
+  tasks:
+    
+    # Create Database User
+    - include_tasks: tasks/database-create-user.yml
+      vars:
+        mysql_user: "datadog"
+        mysql_from_host: "127.0.0.1"
+        mysql_host: "127.0.0.1"
+        mysql_database: "performance_schema"
+        mysql_privileges: '*.*:PROCESS,REPLICATION CLIENT/performance_schema.*:SELECT'
+      when: use_datadog_datadog | default(false)
+
+    # GRANT PROCESS ON *.* TO 'datadog'@'127.0.0.1';
+    # GRANT REPLICATION CLIENT ON *.* TO 'datadog'@'127.0.0.1';
+    # GRANT SELECT ON performance_schema.* TO 'datadog'@'127.0.0.1';
+    
+    # Save the credentials to disk for use by the datadog agent
+    - ansible.builtin.include_tasks: tasks/database-mycnf.yml
+      tags: database
+      vars:
+        mycnf_file: "/opt/datadog-agent/datadog.my.cnf"
+        mycnf_opts: "{{ mysql_user_info['datadog'] }}"
+      when: use_datadog_datadog | default(false)
+    
+    # mysql --defaults-file=/opt/datadog-agent/datadog.my.cnf -e 'show databases'
+    
+    - ansible.builtin.import_role:
+         name: datadog.datadog
+      tags: datadog
+      when: use_datadog_datadog | default(false)

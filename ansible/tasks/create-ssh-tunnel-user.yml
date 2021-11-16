@@ -1,0 +1,211 @@
+---
+# Make sure configs are set in group vars for sshd_additional_config_lines
+# Specify entries for PermitOpen to control what destinations tunnels
+# can be opened to once a connection is established. The PermitOpen must
+# be IP addresses not hostnames.
+# 
+# Example Vars:
+# 
+# sshd_additional_config_lines:
+#   - "Match group tunnel_only"
+#   - "  PubkeyAuthentication        yes"
+#   - "  PasswordAuthentication      no"
+#   - "  PermitEmptyPasswords        no"
+#   - "  GatewayPorts                no"
+#   - "  ChrootDirectory             /home/%u"
+#   - "  ForceCommand                /bin/nologin"
+#   - "  PermitTunnel                yes"
+#   - "  AllowTcpForwarding          yes"
+#   - "  PermitOpen                  1.2.3.4:3306 5.6.7.8:3306"
+#   - "  HostbasedAuthentication     no"
+#   - "  X11Forwarding               no"
+#   - "  AllowAgentForwarding        no"
+#   - "  Banner                      none"
+
+# It is important to note that the line for PermitOpen line in the sshd config will limit
+# the destnation the tunnel will be able to be opened to. This restricts the account from
+# opening a port to any other services on the server, and locks them down to only the
+# destination IP and port specified here.
+#
+# One thing that configuration can not prevent is the ability for this account to be used
+# to open a remote port on the server and have it connect back to the system initiating the
+# connection. Opening a remote port is not likely to be of much concern as some other
+# component would be needed to initiate some kind of communication from the server side to 
+# begin communicating over the tunnel established.
+
+
+# Example Include:
+# - hosts: xzy-xzy
+#   name: Configure SSHD and Create SSH Tunnel User
+#   gather_facts: no
+#   become: true
+#
+#   roles:
+#     - alpacaglue.sshd-lockdown
+#
+#   tasks:
+#     # Crealte tunnel_only SSH user
+#     - include: vendor/alpacaglue/tasks/create-ssh-tunnel-user.yml
+#       args:
+#         generate_user_password: true
+#         authorized_keys:
+#           - "roles/alpacaglue.devops-access/files/devops-access/ssh-keys/dalger"
+#           - "roles/alpacaglue.devops-access/files/devops-access/ssh-keys/mjohnson"
+#           - "files/ssh-keys/xzy.xzy"
+
+
+# Testing
+# SSH_USER=tunnel_only
+# TUNNEL_HOST=6.7.8.9
+# DESTINATION_HOST=1.2.3.4
+# DESTINATION_HTTP_HOST_HEADER=www.example.com
+#
+# # /sbin/nologin No such file or directory - connection closed
+# touch ~/testfile2
+# ssh tunnel_only@${TUNNEL_HOST}
+# ssh ${SSH_USER}@${TUNNEL_HOST} /bin/date
+# scp ${SSH_USER}@${TUNNEL_HOST}:~/.ssh/authorized_keys ~/testfile
+# scp ${SSH_USER}@${TUNNEL_HOST}:/.ssh/authorized_keys ~/testfile
+# scp ~/testfile2 ${SSH_USER}@${TUNNEL_HOST}:~/
+# sftp ${SSH_USER}@${TUNNEL_HOST}
+# sftp ${SSH_USER}@${TUNNEL_HOST}:~/.ssh/authorized_keys ~/testfile
+# sftp ${SSH_USER}@${TUNNEL_HOST}:/.ssh/authorized_keys ~/testfile
+# sftp ${SSH_USER}@${TUNNEL_HOST}:~/ <<< $'put ~/testfile2'
+# rm ~/testfile2
+#
+# # administratively prohibited:
+# ssh ${SSH_USER}@${TUNNEL_HOST} -N -D 12380 # client: curl -I --socks5 localhost:12380 127.0.0.1
+# ssh ${SSH_USER}@${TUNNEL_HOST} -N -L 12380:${DESTINATION_HOST}:80 # client: curl -I -H "HOST: ${DESTINATION_HTTP_HOST_HEADER}" 127.0.0.1:12380
+# ssh ${SSH_USER}@${TUNNEL_HOST} -N -L 6381:${DESTINATION_HOST}:6381 # client: redis-cli -h 127.0.0.1 -p 6381 info server
+#
+# # unfortunately, the client can open a remote port on the server, but should not pose a problem as
+# # a separate process would have to be executed on the server side to utilize the new connection
+# redis-cli -h dev-web71 -p 6381 info server
+# ssh ${SSH_USER}@${TUNNEL_HOST} -N -R 11381:dev-web71:6381 # server: redis-cli -h 127.0.0.1 -p 11381 info server
+#
+# # should be possible to have the client forward a local port to the remote db server
+# ssh ${SSH_USER}@${TUNNEL_HOST} -N -L 3306:${DESTINATION_HOST}:3306
+# mysql -h 127.0.0.1 -P 3306 -u mage_prod_read --protocol=tcp -p -A -e 'show databases;'
+
+- set_fact:
+    tunnel_user_requirements_met: true
+  when: "'Match group tunnel_only' in sshd_additional_config_lines"
+
+- set_fact:
+    tunnel_only_groups:
+      - sshusers
+      - tunnel_only
+    authorized_keys: "{{ authorized_keys | default([]) }}"
+    generate_user_password: "{{ generate_user_password | default(false) }}"
+  when: tunnel_user_requirements_met
+
+# Create group for ssh restrictions
+- name: create group tunnel_only
+  group:
+    name: tunnel_only
+    state: present
+  when: tunnel_user_requirements_met
+
+
+
+- name: Check for tunnel_only user
+  getent: 
+    database: passwd
+    key: tunnel_only
+    fail_key: false
+  when: tunnel_user_requirements_met
+
+
+
+
+
+# Create user with password
+- name: "Generate password for tunnel_only"
+  command: uuidgen
+  register: pw_result
+  changed_when: false
+  check_mode: no
+  when: tunnel_user_requirements_met and generate_user_password and getent_passwd["tunnel_only"] == none
+
+- name: create user tunnel_only with password
+  user:
+    name: "tunnel_only"
+    home: "/home/tunnel_only"
+    groups: "{{ tunnel_only_groups | join(',') }}"
+    append: no
+    shell: /sbin/nologin
+    generate_ssh_key: no
+    password: "{{ pw_result.stdout|password_hash('sha512') }}"
+    update_password: on_create
+  when: tunnel_user_requirements_met and generate_user_password and getent_passwd["tunnel_only"] == none
+
+- name: update /root/created_users.txt [user]
+  ini_file:
+    dest: "/root/created_users.txt"
+    section: user
+    option: "tunnel_only"
+    value: "{{ pw_result.stdout }}"
+    owner: root
+    group: root
+    mode: 0600
+  when: tunnel_user_requirements_met and generate_user_password and getent_passwd["tunnel_only"] == none
+
+
+
+
+
+# Create SSH User without password
+- name: create user tunnel_only without password
+  user:
+    name: "tunnel_only"
+    home: "/home/tunnel_only"
+    groups: "{{ tunnel_only_groups | join(',') }}"
+    append: no
+    shell: /sbin/nologin
+    generate_ssh_key: no
+  when: tunnel_user_requirements_met and not generate_user_password and getent_passwd["tunnel_only"] == none
+
+
+
+# Recheck if the user exists
+- name: Check for tunnel_only user
+  getent: 
+    database: passwd
+    key: tunnel_only
+    fail_key: false
+  when: tunnel_user_requirements_met
+
+# ssh authorized keys
+- name: import user ssh-keys
+  authorized_key:
+    user: "tunnel_only"
+    key: "{{ lookup('file', '{{ item }}') }}"
+    exclusive: no
+  with_items: "{{ authorized_keys }}"
+  when: 
+    - tunnel_user_requirements_met 
+    - authorized_keys|default([]) | length > 0 
+    - getent_passwd["tunnel_only"] != none
+  ignore_errors: "{{ ansible_check_mode }}"
+
+# change permissions of home directory for supporting SSH ChrootDirectory
+- file:
+    path: /home/tunnel_only
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  when: tunnel_user_requirements_met
+
+# Remove default profile files
+- file:
+    path: "/home/tunnel_only/{{ item }}"
+    state: absent
+  with_items: 
+      - ".bash_logout"
+      - ".bash_profile"
+      - ".bashrc"
+      - ".kshrc"
+      - ".mkshrc"
+      - ".emacs"
+  when: tunnel_user_requirements_met

@@ -1,0 +1,9 @@
+---
+- name: test nginx config before reload
+  shell: nginx -t
+  listen:
+    - "reload nginx"
+  notify: execute nginx reload
+
+- name: execute nginx reload
+  service: name=nginx state=reloaded

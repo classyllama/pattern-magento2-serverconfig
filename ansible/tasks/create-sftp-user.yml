@@ -1,0 +1,673 @@
+---
+# Example Vars:
+# 
+# Make sure configs are set in group vars for sshd_additional_config_lines
+# It is important to specify the sshd_lockdown_config_template as this is not run from within 
+# the sshd-lockdown role
+# 
+# 
+# sshd_sftp_subsystem: internal-sftp -m 660
+# sshd_additional_config_lines:
+#   - "Match group sftp_only"
+#   - "  ChrootDirectory             /home/%u"
+#   - "  X11Forwarding               no"
+#   - "  AllowTcpForwarding          no"
+#   - "  ForceCommand                internal-sftp -m 660"
+#   - "  PasswordAuthentication      no"
+
+
+# Example Include:
+# - hosts: xzy-xzy
+#   name: Setup Jailed SFTP accounts
+#   gather_facts: no
+#   become: true
+#
+#   tasks:
+#     # Create Jailed SFTP user
+#     - name: Create Jailed SFTP User
+#       include_tasks: tasks/create-sftp-user.yml
+#       args:
+#         sftp_username: sftp_data
+#         sftp_username_uid: 1077         # optional
+#         sftp_shared_group: www-shared
+#         sftp_shared_group_gid: 1088     # optional
+#         generate_user_password: false
+#         authorized_keys:
+#           - files/ssh-keys/xzy.xzy
+#           - files/ssh-keys/firstname.lastname
+#         sftp_www_environment: stage
+#         sftp_additional_shared_users: 
+#           - apache
+#         sftp_shared_paths: # Do not put trailing slashes on paths
+#           - pub/media
+#         sftp_recursive_set_permissions: false
+#
+#     # Create Jailed SFTP user (placeholder user/groups)
+#     - name: Create Jailed SFTP User for Prod Access
+#       include_tasks: tasks/create-sftp-user.yml
+#       args:
+#         sftp_username: sftp_data
+#         sftp_username_uid: 1077         # optional
+#         sftp_shared_group: www-shared
+#         sftp_shared_group_gid: 1088     # optional
+#         sftp_www_environment: prod
+#         sftp_additional_shared_users: 
+#           - apache
+#         sftp_user_group_placeholders: true
+#
+#   handlers:
+#     # Set handlers for services affected by file/directory and group permission changes
+#     - name: restart sftp affected services
+#       service: name=nginx state=restarted
+#     - name: restart sftp affected services
+#       service: name=php-fpm state=restarted
+
+
+# Testing
+# Upload a file and check the file permissions
+# 
+# USER="user_name"
+# HOST="1.2.3.4"
+# LOCAL_FILE="/local/file/path/testfile.txt"
+# REMOTE_PATH="/sites/env/directory/to/upload/to/"
+#
+# sftp ${USER}@${HOST}:${REMOTE_PATH} <<< "put ${LOCAL_FILE}"
+# sftp ${USER}@${HOST} <<< "ls -l ${REMOTE_PATH}"
+# sftp ${USER}@${HOST} <<< "rm ${REMOTE_PATH}testfile.png"
+#
+# echo "put ${LOCAL_FILE}"
+# echo "ls -l ${REMOTE_PATH}"
+# echo "rm ${REMOTE_PATH}testfile.png"
+# sftp ${USER}@${HOST}
+
+# Set Any Defaults
+- set_fact:
+    sftp_only_requirements_met: false
+    sftp_user_group_placeholders: "{{ sftp_user_group_placeholders | default(false) }}"
+    sftp_user_groups:
+      - sshusers
+      - sftp_only
+    sftp_shared_group: "{{ sftp_shared_group | default('www-shared') }}"
+    sftp_shared_group_gid: "{{ sftp_shared_group_gid | default('') }}"
+    sftp_shared_paths: "{{ sftp_shared_paths | default([]) }}"
+    sftp_shared_paths_length: "{{ sftp_shared_paths|default([]) | length }}"
+    authorized_keys: "{{ authorized_keys | default([]) }}"
+    authorized_keys_length: "{{ authorized_keys|default([]) | length }}"
+    generate_user_password: "{{ generate_user_password | default(false) }}"
+
+- set_fact:
+    sftp_only_requirements_met: true
+  when: "'Match group sftp_only' in sshd_additional_config_lines"
+
+- fail:
+    msg: "ERROR: Make sure configs are set in group vars for sshd_additional_config_lines."
+  when: not sftp_only_requirements_met and not sftp_user_group_placeholders
+
+# Required Arguments
+- set_fact:
+    sftp_username: "{{ sftp_username }}"
+    sftp_username_uid: "{{ sftp_username_uid | default('')  }}"
+    sftp_www_environment: "{{ sftp_www_environment }}" # Examples (data,prod,stage)
+
+- fail:
+    msg: "ERROR: Make sure sftp_shared_paths are specified."
+  when: sftp_shared_paths_length|int < 1 and not sftp_user_group_placeholders
+
+# Create group for ssh restrictions
+- name: create group sftp_only
+  group:
+    name: sftp_only
+    state: present
+
+
+
+
+
+# If sftp_shared_group_gid create group with a specific gid
+- name: Create group with a specific gid
+  block:
+    
+    # Set block variables
+    - name: Define group_to_create vars
+      set_fact:
+        group_to_create: 
+          name: "{{ sftp_shared_group }}"
+          id: "{{ sftp_shared_group_gid }}"
+    
+    # Check existing groups for any conflicts then create group
+    - name: use gentent to get all group entities
+      getent: 
+        database: group
+
+    - name: "Check groups for {{ group_to_create.name }} name or {{ group_to_create.id }} gid"
+      set_fact:
+        filtered_groups: "{{ filtered_groups|default({}) | combine( {item: getent_group[item][1]} ) }}"
+      when: 
+        getent_group[item] is defined 
+        and 
+        (
+          getent_group[item][1] == group_to_create.id
+          or
+          item == group_to_create.name
+        )
+      with_items:
+        - "{{ getent_group | list }}"
+      loop_control:
+          label: "{{ item }}: {{ getent_group[item]|join(', ') }}"
+      ignore_errors: '{{ ansible_check_mode }}'
+    
+    - name: Define defaults
+      set_fact:
+        group_name_exists: false
+        group_id_exists: false
+        group_name_with_id_exists: false
+
+    - name: Set group_name_exists if group name exists
+      set_fact:
+        group_name_exists: true
+      when: 
+        - filtered_groups is defined 
+        - filtered_groups|select('equalto', group_to_create.name)|list|count > 0
+    - name: Set group_id_exists if group id is already in use
+      set_fact:
+        group_id_exists: true
+      when: 
+        - filtered_groups is defined 
+        - item.value|int == group_to_create.id|int
+      with_dict: "{{ filtered_groups }}"
+    - name: Set group_name_with_id_exists if group already exists with the correct id
+      set_fact:
+        group_name_with_id_exists: true
+      when: 
+        - filtered_groups is defined
+        - item.value|int == group_to_create.id|int
+        - item.key == group_to_create.name
+      with_dict: "{{ filtered_groups }}"
+
+    
+
+    # Sanity Checks
+    - fail: 
+        msg: "{{ group_to_create.name }} exists but not with id {{ group_to_create.id }}"
+      when: group_name_exists and not group_name_with_id_exists
+    - fail: 
+        msg: "some other group with gid {{ group_to_create.id }} already exists"
+      when: not group_name_with_id_exists and group_id_exists
+
+    # Create Group
+    - name: "Ensure group {{ group_to_create.name }} exists with id {{ group_to_create.id }}"
+      group:
+        name: "{{ group_to_create.name }}"
+        state: present
+        gid: "{{ group_to_create.id }}"
+      when: not group_name_exists and not group_id_exists
+  
+  # Block conditional
+  when: sftp_shared_group_gid != ''
+
+
+
+# If not sftp_shared_group_gid create group with system assigned gid
+- name: Create group with system assigned gid
+  block:
+    - name: "create shared group {{ sftp_shared_group }}"
+      group:
+        name: "{{ sftp_shared_group }}"
+        state: present
+  when: sftp_shared_group_gid == ''
+
+
+
+- name: "Check for {{ sftp_shared_group }} group"
+  getent: 
+    database: group
+    key: "{{ sftp_shared_group }}"
+    fail_key: false
+
+
+
+
+
+
+
+# Add www-xxxxxx to shared group
+- name: "Adding user www-{{ sftp_www_environment }} to {{ sftp_shared_group }} group"
+  user:
+    name: "www-{{ sftp_www_environment }}"
+    groups: "{{ sftp_shared_group }}"
+    append: yes
+  when: getent_group[sftp_shared_group] != none
+- name: "Adding user nginx to {{ sftp_shared_group }} group"
+  user:
+    name: "nginx"
+    groups: "{{ sftp_shared_group }}"
+    append: yes
+  when: getent_group[sftp_shared_group] != none
+  # nginx must be restarted in order for the permission changes to take affect
+  notify: restart sftp affected services
+- name: "Adding additional users to {{ sftp_shared_group }} group"
+  user:
+    name: "{{ item }}"
+    groups: "{{ sftp_shared_group }}"
+    append: yes
+  when: 
+    - getent_group[sftp_shared_group] != none 
+    - sftp_additional_shared_users|default([]) | length > 0
+  with_items: "{{ sftp_additional_shared_users }}"
+
+
+
+- name: Check for {{ sftp_username }} user
+  getent: 
+    database: passwd
+    key: "{{ sftp_username }}"
+    fail_key: false
+
+
+
+
+
+# Check existing users for any conflicts then create user
+- name: use gentent to get all user entities
+  getent: 
+    database: passwd
+
+# Create user with password
+- name: Create user with password
+  block:
+    
+    - name: "Generate password for {{ sftp_username }} user"
+      command: uuidgen
+      register: pw_result
+      changed_when: false
+      check_mode: no
+    
+    
+    
+    # # If sftp_username_uid create user with a specific uid
+    - name: Create user with a specific uid
+      block: 
+    
+        # Set block variables
+        - name: Define user_to_create vars
+          set_fact:
+            user_to_create: 
+              name: "{{ sftp_username }}"
+              id: "{{ sftp_username_uid }}"
+        
+        # Check existing users for any conflicts then create user
+        - name: use gentent to get all user entities
+          getent: 
+            database: passwd
+
+        - name: "Check users for {{ user_to_create.name }} name or {{ user_to_create.id }} uid"
+          set_fact:
+            filtered_users: "{{ filtered_users|default({}) | combine( {item: getent_passwd[item][1]} ) }}"
+          when: 
+            getent_passwd[item] is defined 
+            and 
+            (
+              getent_passwd[item][1] == user_to_create.id
+              or
+              item == user_to_create.name
+            )
+          with_items:
+            - "{{ getent_passwd | list }}"
+          loop_control:
+              label: "{{ item }}: {{ getent_passwd[item]|join(', ') }}"
+          ignore_errors: '{{ ansible_check_mode }}'
+
+        - name: Define defaults
+          set_fact:
+            user_name_exists: false
+            user_id_exists: false
+            user_name_with_id_exists: false
+        
+        - name: Set user_name_exists if user name exists
+          set_fact:
+            user_name_exists: true
+          when: 
+            - filtered_users is defined 
+            - filtered_users|select('equalto', user_to_create.name)|list|count > 0
+        - name: Set user_id_exists if user id is already in use
+          set_fact:
+            user_id_exists: true
+          when: 
+            - filtered_users is defined 
+            - item.value|int == user_to_create.id|int
+          with_dict: "{{ filtered_users }}"
+        - name: Set user_name_with_id_exists if user already exists with the correct id
+          set_fact:
+            user_name_with_id_exists: true
+          when: 
+            - filtered_users is defined 
+            - item.value|int == user_to_create.id|int
+            - item.key == user_to_create.name
+          with_dict: "{{ filtered_users }}"
+
+        # Sanity Checks
+        - fail: 
+            msg: "{{ user_to_create.name }} exists but not with id {{ user_to_create.id }}"
+          when: user_name_exists and not user_name_with_id_exists
+        - fail: 
+            msg: "some other user with uid {{ user_to_create.id }} already exists"
+          when: not user_name_with_id_exists and user_id_exists
+
+        # Create User
+        - name: "Ensure user {{ user_to_create.name }} exists with id {{ user_to_create.id }}"
+          user:
+            name: "{{ user_to_create.name }}"
+            uid: "{{ user_to_create.id }}"
+            group: "{{ group_to_create.name }}"
+            groups: "{{ sftp_user_groups | join(',') }}"
+            home: "/home/{{ user_to_create.name }}"
+            append: no
+            shell: /sbin/nologin
+            generate_ssh_key: no
+            password: "{{ pw_result.stdout|password_hash('sha512') }}"
+            update_password: on_create
+          when: not user_name_exists and not user_id_exists
+      
+      # Block conditional
+      when: sftp_username_uid != ''
+    
+    
+    
+    # # If not sftp_username_uid create user with system assigned uid
+    - name: Create user with system assigned uid
+      block:  
+    
+        - name: create user {{ sftp_username }} with password
+          user:
+            name: "{{ sftp_username }}"
+            group: "{{ sftp_shared_group }}"
+            groups: "{{ sftp_user_groups | join(',') }}"
+            home: "/home/{{ sftp_username }}"
+            append: no
+            shell: /sbin/nologin
+            generate_ssh_key: no
+            password: "{{ pw_result.stdout|password_hash('sha512') }}"
+            update_password: on_create
+      
+      # Block conditional
+      when: sftp_username_uid == ''
+    
+    
+
+    - name: update /root/created_users.txt [user]
+      ini_file:
+        dest: "/root/created_users.txt"
+        section: user
+        option: "{{ sftp_username }}"
+        value: "{{ pw_result.stdout }}"
+        owner: root
+        group: root
+        mode: 0600
+  
+  # Block conditional
+  when: generate_user_password and getent_passwd[sftp_username] is not defined and not sftp_user_group_placeholders
+
+
+
+
+
+
+# Check existing users for any conflicts then create user
+- name: use gentent to get all user entities
+  getent: 
+    database: passwd
+
+# Create SSH User without password
+- name: Create SSH User without password
+  block:
+    
+    # # If sftp_username_uid create user with a specific uid
+    - name: Create user with a specific uid
+      block: 
+    
+        # Set block variables
+        - name: Define user_to_create vars
+          set_fact:
+            user_to_create: 
+              name: "{{ sftp_username }}"
+              id: "{{ sftp_username_uid }}"
+
+        - name: "Check users for {{ user_to_create.name }} name or {{ user_to_create.id }} uid"
+          set_fact:
+            filtered_users: "{{ filtered_users|default({}) | combine( {item: getent_passwd[item][1]} ) }}"
+          when: 
+            getent_passwd[item] is defined 
+            and 
+            (
+              getent_passwd[item][1] == user_to_create.id
+              or
+              item == user_to_create.name
+            )
+          with_items:
+            - "{{ getent_passwd | list }}"
+          loop_control:
+              label: "{{ item }}: {{ getent_passwd[item]|join(', ') }}"
+          ignore_errors: '{{ ansible_check_mode }}'
+
+        - name: Define defaults
+          set_fact:
+            user_name_exists: false
+            user_id_exists: false
+            user_name_with_id_exists: false
+        
+        - name: Set user_name_exists if user name exists
+          set_fact:
+            user_name_exists: true
+          when: 
+            - filtered_users is defined 
+            - filtered_users|select('equalto', user_to_create.name)|list|count > 0
+        - name: Set user_id_exists if user id is already in use
+          set_fact:
+            user_id_exists: true
+          when: 
+            - filtered_users is defined 
+            - item.value|int == user_to_create.id|int
+          with_dict: "{{ filtered_users }}"
+        - name: Set user_name_with_id_exists if user already exists with the correct id
+          set_fact:
+            user_name_with_id_exists: true
+          when: 
+            - filtered_users is defined 
+            - item.value|int == user_to_create.id|int
+            - item.key == user_to_create.name
+          with_dict: "{{ filtered_users }}"
+
+        # Sanity Checks
+        - fail: 
+            msg: "{{ user_to_create.name }} exists but not with id {{ user_to_create.id }}"
+          when: user_name_exists and not user_name_with_id_exists
+        - fail: 
+            msg: "some other user with uid {{ user_to_create.id }} already exists"
+          when: not user_name_with_id_exists and user_id_exists
+
+        # Create User
+        - name: "Ensure user {{ user_to_create.name }} exists with id {{ user_to_create.id }} - without password"
+          user:
+            name: "{{ user_to_create.name }}"
+            uid: "{{ user_to_create.id }}"
+            group: "{{ group_to_create.name }}"
+            groups: "{{ sftp_user_groups | join(',') }}"
+            home: "/home/{{ user_to_create.name }}"
+            append: no
+            shell: /sbin/nologin
+            generate_ssh_key: no
+          when: not user_name_exists and not user_id_exists
+      
+      # Block conditional
+      when: sftp_username_uid != ''
+    
+    
+    
+    # # If not sftp_username_uid create user with system assigned uid
+    - name: Create user with system assigned uid
+      block:  
+    
+        - name: create user {{ sftp_username }} without password
+          user:
+            name: "{{ sftp_username }}"
+            group: "{{ sftp_shared_group }}"
+            groups: "{{ sftp_user_groups | join(',') }}"
+            home: "/home/{{ sftp_username }}"
+            append: no
+            shell: /sbin/nologin
+            generate_ssh_key: no
+      
+      # Block conditional
+      when: sftp_username_uid == ''
+  
+  
+  
+  # Block conditional
+  when: 
+    - not generate_user_password
+    - getent_passwd[sftp_username] is not defined
+
+
+
+
+# Remove default profile files
+- file:
+    path: "/home/{{ sftp_username }}/{{ item }}"
+    state: absent
+  with_items: 
+      - ".bash_logout"
+      - ".bash_profile"
+      - ".bashrc"
+      - ".kshrc"
+      - ".mkshrc"
+      - ".emacs"
+
+
+# ssh authorized keys directory
+- name: home directory permissions
+  file:
+    path: "/home/{{ sftp_username }}/.ssh"
+    state: directory
+    owner: "{{ sftp_username }}"
+    group: "{{ sftp_shared_group }}"
+    mode: 0700
+  when: authorized_keys_length|int > 0 and not sftp_user_group_placeholders
+- name: Check status of .ssh directory
+  stat:
+    path: "/home/{{ sftp_username }}/.ssh"
+  register: sftp_user_ssh_dir
+
+# ssh authorized keys
+- name: import user ssh-keys
+  authorized_key:
+    path: "/home/{{ sftp_username }}/.ssh/authorized_keys"
+    user: "{{ sftp_username }}"
+    key: "{{ lookup('file', '{{ item }}') }}"
+    exclusive: no
+  with_items: "{{ authorized_keys }}"
+  when: authorized_keys_length|int > 0 and sftp_user_ssh_dir.stat.exists == True and not sftp_user_group_placeholders
+  ignore_errors: "{{ ansible_check_mode }}"
+
+# Verify permissions are secure
+- name: Check status of authorized_keys
+  stat:
+    path: "/home/{{ sftp_username }}/.ssh/authorized_keys"
+  register: sftp_user_authorized_keys
+  when: authorized_keys_length|int > 0 and sftp_user_ssh_dir.stat.exists == True and not sftp_user_group_placeholders
+- name: set file permissions on "/home/{{ sftp_username }}/.ssh/authorized_keys"
+  file:
+    path: "/home/{{ sftp_username }}/.ssh/authorized_keys"
+    state: file
+    owner: "{{ sftp_username }}"
+    group: "{{ sftp_shared_group }}"
+    mode: 0600
+  when: authorized_keys_length|int > 0 and sftp_user_ssh_dir.stat.exists == True and sftp_user_authorized_keys.stat.exists == True and not sftp_user_group_placeholders
+
+# change permissions of home directory for supporting SSH ChrootDirectory
+- name: home directory permissions
+  file:
+    path: "/home/{{ sftp_username }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  when: not sftp_user_group_placeholders
+
+
+
+# create jailed root
+- name: jailed root
+  file:
+    path: "/home/{{ sftp_username }}/sites"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  when: not sftp_user_group_placeholders
+
+
+
+
+# Extract list of mounted paths
+- set_fact: 
+    ansible_mounts_list: "{{ hostvars[inventory_hostname]|json_query('ansible_mounts[*].mount') }}"
+
+# directories for bind end points
+- name: "Bind End Point /home/{{ sftp_username }}/sites/{{ sftp_www_environment }}/{{ item }}"
+  file:
+    path: "/home/{{ sftp_username }}/sites/{{ sftp_www_environment }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  with_items: "{{ sftp_shared_paths }}"
+  when: "'/home/' + sftp_username + '/sites/' + sftp_www_environment + '/' + item not in ansible_mounts_list and not sftp_user_group_placeholders"
+
+# make sure target directories have correct setgid permissions set
+- name: "Ensure target share directory exists /var/www/{{ sftp_www_environment }}/shared"
+  file:
+    path: "/var/www/{{ sftp_www_environment }}/shared"
+    state: directory
+    recurse: no
+    owner: "www-{{ sftp_www_environment }}"
+    group: "www-{{ sftp_www_environment }}"
+    mode: "2770"
+  when: not sftp_user_group_placeholders
+- name: "Target /var/www/{{ sftp_www_environment }}/shared/{{ item }}"
+  file:
+    path: "/var/www/{{ sftp_www_environment }}/shared/{{ item }}"
+    state: directory
+    recurse: no
+    owner: "www-{{ sftp_www_environment }}"
+    group: "{{ sftp_shared_group }}"
+  with_items: "{{ sftp_shared_paths }}"
+  when: getent_group[sftp_shared_group] != none and not sftp_user_group_placeholders
+  notify: restart sftp affected services
+
+# Recursive permission set
+- name: "Ensure ownership (recursive) to all existing contents /var/www/{{ sftp_www_environment }}/shared/{{ item }}"
+  command: chown -R www-{{ sftp_www_environment }}:{{ sftp_shared_group }} /var/www/{{ sftp_www_environment }}/shared/{{ item }}
+  with_items: "{{ sftp_shared_paths }}"
+  when: sftp_recursive_set_permissions and not sftp_user_group_placeholders
+  notify: restart sftp affected services
+- name: "Ensure directories (recursive) are 2770 /var/www/{{ sftp_www_environment }}/shared/{{ item }}"
+  command: find /var/www/{{ sftp_www_environment }}/shared/{{ item }} -type d -exec chmod 2770 {} \;
+  with_items: "{{ sftp_shared_paths }}"
+  when: sftp_recursive_set_permissions and not sftp_user_group_placeholders
+  notify: restart sftp affected services
+- name: "Ensure files (recursive) are 0660 /var/www/{{ sftp_www_environment }}/shared/{{ item }}"
+  command: find /var/www/{{ sftp_www_environment }}/shared/{{ item }} -type f -exec chmod 0660 {} \;
+  with_items: "{{ sftp_shared_paths }}"
+  when: sftp_recursive_set_permissions and not sftp_user_group_placeholders
+  notify: restart sftp affected services
+
+# bind jailed path to source
+- name: Mount/Bind jailed path to destination
+  mount:
+    path: "/home/{{ sftp_username }}/sites/{{ sftp_www_environment }}/{{ item }}"
+    src: "/var/www/{{ sftp_www_environment }}/shared/{{ item }}"
+    fstype: none
+    opts: defaults,bind
+    state: mounted
+  with_items: "{{ sftp_shared_paths }}"
+  when: not sftp_user_group_placeholders

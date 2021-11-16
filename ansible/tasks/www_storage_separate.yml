@@ -1,0 +1,35 @@
+# This task file requires the following vars be set:
+#
+# www_storage_dir: /data/www
+# www_storage_separate:
+#   - env_name: data
+#     user_name: www-data
+#     user_group: www-data
+
+---
+- name: Check that the local volume web directory exists
+  stat:
+    path: "/var/www/{{ www_storage_separate.env_name }}"
+  register: www_local_user_dir
+- name: Check that the separate volume web directory exists
+  stat:
+    path: "{{ www_storage_dir }}/{{ www_storage_separate.env_name }}"
+  register: www_separate_user_dir
+- name: Move local web directory to separate volume
+  command: "mv /var/www/{{ www_storage_separate.env_name }} {{ www_storage_dir }}/{{ www_storage_separate.env_name }}"
+  when: www_local_user_dir.stat.exists and www_local_user_dir.stat.isdir and not www_separate_user_dir.stat.exists
+- name: Create web directory
+  file:
+    path: "{{ www_storage_dir }}/{{ www_storage_separate.env_name }}"
+    owner: "{{ www_storage_separate.user_name }}"
+    group: "{{ www_storage_separate.user_group }}"
+    mode: 0770
+    state: directory
+  when: not www_separate_user_dir.stat.exists
+- name: Link local volume web directory to separate volume web directory
+  file:
+    src: "{{ www_storage_dir }}/{{ www_storage_separate.env_name }}"
+    dest: "/var/www/{{ www_storage_separate.env_name }}"
+    owner: "{{ www_storage_separate.user_name }}"
+    group: "{{ www_storage_separate.user_group }}"
+    state: link

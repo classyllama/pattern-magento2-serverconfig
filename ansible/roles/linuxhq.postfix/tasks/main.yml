@@ -1,0 +1,95 @@
+---
+- name: Ensure that the postfix packages are present
+  tags: postfix
+  become: true
+  yum:
+    name: "{{ item }}"
+    state: present
+  register: postfix_yum
+  loop:
+    - postfix
+    - "{{ postfix_packages }}"
+
+- name: Fetch postfix version from RPM database
+  tags: postfix
+  check_mode: false
+  args:
+    warn: no
+  command: |
+    rpm -q --queryformat %{version} postfix
+  register: postfix_rpm
+  changed_when: false
+
+- name: Set postfix database and version facts
+  tags: postfix
+  set_fact:
+    postfix_databases:
+      - btree
+      - cdb
+      - dbm
+      - hash
+      - fail
+      - sdbm
+    postfix_version: "{{ postfix_rpm.stdout }}"
+
+- name: Overlay postfix configurations
+  tags: postfix
+  become: true
+  template:
+    src: main.cf.j2
+    dest: /etc/postfix/main.cf
+    owner: root
+    group: root
+    mode: 0644
+  register: postfix_template
+  notify: restart postfix
+
+- name: Overlay postfix generic maps
+  tags: postfix
+  become: true
+  template:
+    src: generic.j2
+    dest: /etc/postfix/generic
+    owner: root
+    group: root
+    mode: 0600
+  notify: postmap generic
+  when: postfix_parameters.smtp_generic_maps is defined
+
+- name: Overlay postfix sasl password maps
+  tags: postfix
+  become: true
+  no_log: true
+  template:
+    src: sasl_passwd.j2
+    dest: /etc/postfix/sasl_passwd
+    owner: root
+    group: root
+    mode: 0600
+  notify: postmap sasl_passwd
+  when:
+    - postfix_parameters.relayhost is defined
+    - postfix_parameters.smtp_sasl_password_maps is defined
+    - postfix_sasl_password is defined
+    - postfix_sasl_username is defined
+
+- name: Overlay postfix sender canonical maps
+  tags: postfix
+  become: true
+  template:
+    src: sender_canonical.j2
+    dest: /etc/postfix/sender_canonical
+    owner: root
+    group: root
+    mode: 0600
+  notify: postmap sender_canonical
+  when: postfix_parameters.sender_canonical_maps is defined
+
+- name: Ensure that postfix is started and enabled on boot
+  tags: postfix
+  become: true
+  service:
+    enabled: yes
+    name: postfix
+    state: started
+...
