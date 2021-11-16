@@ -1,6 +1,6 @@
 ---
 - name: Database Server Role
-  hosts: db
+  hosts: stgdb
   become: true
 
   vars_files:

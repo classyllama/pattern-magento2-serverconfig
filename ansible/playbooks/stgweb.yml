@@ -1,6 +1,6 @@
 ---
 - name: Web Role
-  hosts: web
+  hosts: stgweb
   become: true
 
   vars_files:
