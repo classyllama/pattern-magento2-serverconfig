@@ -1,6 +1,6 @@
 ---
 - name: Initialize Postfix
-  hosts: all
+  hosts: mailsenders
   become: true
 
   vars_files:
