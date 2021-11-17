@@ -5,7 +5,6 @@
 
   vars_files:
     - ../vars/app_vars.default.yml
-    - ../vars/app_vars.config.yml
 
   tasks:
     

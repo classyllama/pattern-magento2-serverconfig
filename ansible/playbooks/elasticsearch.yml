@@ -1,46 +1,13 @@
 ---
-- name: Database Server Role
-  hosts: stgdb
+- name: ElasticSearch Server Role
+  hosts: elasticsearch
   become: true
 
   vars_files:
     - ../vars/app_vars.default.yml
-    - ../vars/app_vars.staging.config.yml
 
   tasks:
-    
-    # Environment Specific Services (optionally multiple instances)
-    - ansible.builtin.include_role:
-         name: classyllama.multi-redis
-         apply:
-           tags:
-             - redis
-      tags: redis
-      vars:
-        redis_instance: 
-          name: "{{ each_instance.role_vars.redis_instance.name }}"
-          port: "{{ each_instance.role_vars.redis_instance.port }}"
-          save: "{{ each_instance.role_vars.redis_instance.save | default(false) }}"
-        redis_maxmemory: "{{ each_instance.role_vars.redis_maxmemory | default(redis_maxmemory_default) }}"
-        redis_instance_config: "{{ each_instance.role_vars.redis_instance_config | default([]) }}"
-      loop: '{{ redis_instances }}'
-      loop_control:
-        loop_var: each_instance
-      when: use_classyllama_multi_redis | default(false)
-    
-    # Global Services
-    - ansible.builtin.import_role:
-         name: classyllama.percona
-      tags: mysql
-      when: use_classyllama_percona | default(false)
-    
-    - ansible.builtin.import_role:
-         name: classyllama.mariadb
-      tags: mysql
-      when: use_classyllama_mariadb | default(false)
-    
-    
-    
+
     # --- Elasticsearch Service
     - name: Install Elastic Dependencies
       package:
@@ -83,17 +50,17 @@
         - use_elastic_elasticsearch | default(false)
         - es_version.split(".")[0] == "7"
         - es_createhome | default(false)
-        - es_tmp_dir is defined 
+        - es_tmp_dir is defined
         - es_tmp_dir | length > 0
         - es_tmp_dir != '/tmp'
 
     # Create temp directory
     - name: Check if Elastic Temp Dir Already Exists
-      stat: 
+      stat:
         path: "{{ es_tmp_dir }}"
       register: es_tmp_dir_stat
-      when: 
-        - es_tmp_dir is defined 
+      when:
+        - es_tmp_dir is defined
         - es_tmp_dir | length > 0
         - es_tmp_dir != '/tmp'
     - name: Create Elastic Temp Directory
@@ -101,8 +68,8 @@
         path: "{{ es_tmp_dir }}"
         state: directory
         mode: "777"
-      when: 
-        - es_tmp_dir is defined 
+      when:
+        - es_tmp_dir is defined
         - es_tmp_dir | length > 0
         - es_tmp_dir != '/tmp'
         - not es_tmp_dir_stat.stat.exists
@@ -112,7 +79,7 @@
       tags: [ elasticsearch, elastic-stack ]
       when: use_elastic_elasticsearch | default(false)
       ignore_errors: "{{ ansible_check_mode }}" # This 3rd party role doesn't always play with with check mode
-    
+
     # Secure temp directory
     - name: Update Elastic Temp Directory
       file:
@@ -121,40 +88,7 @@
         owner: "{{ es_user }}"
         group: "{{ es_group }}"
         mode: "2750"
-      when: 
-        - es_tmp_dir is defined 
+      when:
+        - es_tmp_dir is defined
         - es_tmp_dir | length > 0
         - es_tmp_dir != '/tmp'
-    
-    
-    
-    # Install Additional Tools
-    - ansible.builtin.import_role:
-         name: classyllama.dbbackup
-      when: use_classyllama_dbbackup | default(false)
-    
-    
-    
-    # --- Create Databases
-    - ansible.builtin.include_tasks: tasks/database-create.yml
-      tags: database
-      vars:
-        mysql_db: "{{ mysql_database.db_name }}"
-        mysql_host: "{{ mysql_database.user_host }}"
-        mysql_user: "{{ mysql_database.user_name }}"
-      loop: '{{ mysql_databases }}'
-      loop_control:
-        loop_var: mysql_database
-
-    - ansible.builtin.include_tasks: tasks/database-mycnf.yml
-      tags: database
-      vars:
-        mycnf_file: "{{ mysql_database.mycnf_file }}"
-        mycnf_opts: "{{ mysql_user_info[mysql_database.user_name] }}"
-      loop: '{{ mysql_databases }}'
-      loop_control:
-        loop_var: mysql_database
-
-    - name: Run all notified handlers
-      meta: flush_handlers
-      tags: database
