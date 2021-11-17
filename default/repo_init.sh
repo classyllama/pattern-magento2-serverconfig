@@ -59,6 +59,18 @@ TARGET_PATH="../../persistent"
   || rm -f ${SYMLINK_PATH}
 [[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
 
+SYMLINK_PATH="ansible/playbooks/group_vars"
+TARGET_PATH="../persistent/group_vars"
+([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
+  || rm -f ${SYMLINK_PATH}
+[[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
+
+SYMLINK_PATH="ansible/playbooks/host_vars"
+TARGET_PATH="../persistent/host_vars"
+([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
+  || rm -f ${SYMLINK_PATH}
+[[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
+
 SYMLINK_PATH="ansible/playbooks/vars"
 TARGET_PATH="../vars"
 ([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
