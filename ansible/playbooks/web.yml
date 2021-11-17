@@ -3,9 +3,6 @@
   hosts: web
   become: true
 
-  vars_files:
-    - ../vars/app_vars.default.yml
-
   tasks:
     
     # Web User - Environment Specific - Service User / Web Directory Setup

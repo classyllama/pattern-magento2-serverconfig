@@ -3,9 +3,6 @@
   hosts: mailsenders
   become: true
 
-  vars_files:
-    - ../vars/app_vars.default.yml
-  
   vars:
     postfix_sasl_path: /etc/postfix/sasl_passwd
 

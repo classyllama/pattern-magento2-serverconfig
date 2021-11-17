@@ -3,9 +3,6 @@
   hosts: db
   become: true
 
-  vars_files:
-    - ../vars/app_vars.default.yml
-
   tasks:
     
     # Global Services

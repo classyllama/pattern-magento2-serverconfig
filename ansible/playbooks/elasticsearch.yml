@@ -3,9 +3,6 @@
   hosts: elasticsearch
   become: true
 
-  vars_files:
-    - ../vars/app_vars.default.yml
-
   tasks:
 
     # --- Elasticsearch Service

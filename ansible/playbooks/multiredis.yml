@@ -3,9 +3,6 @@
   hosts: redis
   become: true
 
-  vars_files:
-    - ../vars/app_vars.default.yml
-
   tasks:
 
     # Environment Specific Services (optionally multiple instances)

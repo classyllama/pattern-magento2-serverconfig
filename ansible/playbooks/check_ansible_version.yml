@@ -4,9 +4,6 @@
   connection: local
   gather_facts: no
 
-  vars_files:
-    - ../vars/app_vars.default.yml
-  
   tasks:
     - name: Display Ansible Version and Requirement
       ansible.builtin.debug:
