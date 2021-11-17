@@ -22,12 +22,6 @@ TARGET_PATH="../persistent/ansible.cfg"
   || rm -f ${SYMLINK_PATH}
 [[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
 
-SYMLINK_PATH="ansible/vars/app_vars.config.yml"
-TARGET_PATH="../../persistent/app_vars.config.yml"
-([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
-  || rm -f ${SYMLINK_PATH}
-[[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
-
 SYMLINK_PATH="ansible/inventories"
 TARGET_PATH="../persistent/inventories"
 ([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
