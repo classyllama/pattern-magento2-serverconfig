@@ -74,6 +74,9 @@
     # PHP - Environment Specific Tools
     - ansible.builtin.import_role:
          name: classyllama.php-cachetool
+         apply:
+           tags:
+             - toolchain
       tags: toolchain
       when: use_classyllama_php_cachetool | default(false)
     - name: Link cachetool config into /var/www/<env_name> directory
@@ -132,10 +135,12 @@
       when: use_create_http_auth | default(false)
     
     
-    
     # Varnish - Environment Specific Instances
     - ansible.builtin.include_role:
          name: classyllama.varnish
+         apply:
+           tags:
+             - varnish
       tags: varnish
       vars:
         varnish_instance: "{{ each_varnish_instance.role_vars.varnish_instance }}"
@@ -145,11 +150,12 @@
         loop_var: each_varnish_instance
       when: use_classyllama_varnish | default(false)
     
-    
-    
     # Redis - Environment Specific Instances - Web Slaves (Read Only Cache)
     - ansible.builtin.include_role:
          name: classyllama.multi-redis
+         apply:
+           tags:
+             - redis
       tags: redis
       vars:
         redis_instance: 
