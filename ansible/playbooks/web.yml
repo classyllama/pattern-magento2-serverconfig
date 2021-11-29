@@ -74,9 +74,6 @@
     # PHP - Environment Specific Tools
     - ansible.builtin.import_role:
         name: classyllama.php-cachetool
-        apply:
-          tags:
-            - toolchain
       tags: toolchain
       when: use_classyllama_php_cachetool | default(false)
     - name: Link cachetool config into /var/www/<env_name> directory
