@@ -112,9 +112,6 @@
     # Nginx - Global Service
     - ansible.builtin.import_role:
         name: classyllama.nginx
-        apply:
-          tags:
-            - nginx
       tags: nginx
       when: use_classyllama_nginx | default(false)
     
