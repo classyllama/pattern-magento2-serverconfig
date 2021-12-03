@@ -22,18 +22,17 @@ TARGET_PATH="../persistent/ansible.cfg"
   || rm -f ${SYMLINK_PATH}
 [[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
 
-SYMLINK_PATH="ansible/vars/app_vars.config.yml"
-TARGET_PATH="../../persistent/app_vars.config.yml"
-([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
-  || rm -f ${SYMLINK_PATH}
-[[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
-
 SYMLINK_PATH="ansible/inventories"
 TARGET_PATH="../persistent/inventories"
 ([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
   || rm -f ${SYMLINK_PATH}
 [[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
 
+SYMLINK_PATH="ansible/group_vars"
+TARGET_PATH="../persistent/group_vars"
+([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
+  || rm -f ${SYMLINK_PATH}
+[[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
 
 # Create symlinks in source to simplify paths in files
 SYMLINK_PATH="ansible/persistent"
@@ -44,6 +43,12 @@ TARGET_PATH="../persistent"
 
 SYMLINK_PATH="ansible/playbooks/persistent"
 TARGET_PATH="../../persistent"
+([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
+  || rm -f ${SYMLINK_PATH}
+[[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
+
+SYMLINK_PATH="ansible/playbooks/group_vars"
+TARGET_PATH="../persistent/group_vars"
 ([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
   || rm -f ${SYMLINK_PATH}
 [[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}

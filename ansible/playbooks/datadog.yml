@@ -3,10 +3,6 @@
   hosts: all
   become: true
 
-  vars_files:
-    - ../vars/app_vars.default.yml
-    - ../vars/app_vars.config.yml
-
   tasks:
     
     # Create Database User
