@@ -66,7 +66,7 @@ TARGET_PATH="../tasks"
 [[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
 
 SYMLINK_PATH="ansible/playbooks/files"
-TARGET_PATH="../files"
+TARGET_PATH="../persistent/files"
 ([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
   || rm -f ${SYMLINK_PATH}
 [[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
