@@ -16,11 +16,11 @@ echo "Initializing Source/Persistent Additional Steps"
 
 
 # Create symlinks in source to persistent files
-SYMLINK_PATH="ansible/ansible.cfg"
-TARGET_PATH="../persistent/ansible.cfg"
-([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
-  || rm -f ${SYMLINK_PATH}
-[[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
+#SYMLINK_PATH="ansible/ansible.cfg"
+#TARGET_PATH="../persistent/ansible.cfg"
+#([[ -L ${SYMLINK_PATH} ]] && [ "$(readlink -- ${SYMLINK_PATH})" = ${TARGET_PATH} ]) \
+#  || rm -f ${SYMLINK_PATH}
+#[[ -L ${SYMLINK_PATH} ]] || ln -s ${TARGET_PATH} ${SYMLINK_PATH}
 
 SYMLINK_PATH="ansible/inventories"
 TARGET_PATH="../persistent/inventories"
