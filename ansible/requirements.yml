@@ -124,7 +124,11 @@ roles:
   - src: git@github.com:classyllama/ansible-role-repo-python-appstream.git
     name: classyllama.repo-python-appstream
     scm: git
-  
+
+  - src: git@github.com:classyllama/ansible-role-repo-redis-appstream.git
+    name: classyllama.repo-redis-appstream
+    scm: git
+
   - src: git@github.com:classyllama/ansible-role-repo-varnish.git
     name: classyllama.repo-varnish
     scm: git
