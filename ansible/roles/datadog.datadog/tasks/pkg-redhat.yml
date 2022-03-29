@@ -1,11 +1,24 @@
 ---
-- name: Fail early if Python 3 is used on CentOS / RHEL < 8
+- name: Fail early if Python 3 is used on CentOS / RHEL < 8 with old Ansible
   fail:
-    msg: "The installation of the Agent on CentOS / RHEL versions < 8 requires the 'yum' module, which is not compatible with Python 3.
-          To run this role, use a Python 2 interpreter on hosts running CentOS / RHEL < 8."
+    msg: "The installation of the Agent on RedHat family systems using yum is not compatible with Python 3 with older Ansible versions.
+          To run this role, use a Python 2 interpreter on hosts running CentOS / RHEL < 8 or upgrade Ansible to version 2.11+"
   when: (not datadog_ignore_old_centos_python3_error)
-        and (ansible_facts.distribution_major_version | int <= 7)
+        and (ansible_version.full is version("2.11", operator="lt", strict=True))
+        and (ansible_pkg_mgr == "yum")
         and (ansible_facts.python.version.major | int >= 3)
+
+- name: Find out whether to set repo_gpgcheck or not
+  # We turn off repo_gpgcheck on custom repos and on RHEL/CentOS 8.1 because
+  # of https://bugzilla.redhat.com/show_bug.cgi?id=1792506
+  set_fact:
+    do_yum_repo_gpgcheck: >-
+      {{ datadog_yum_repo_gpgcheck if datadog_yum_repo_gpgcheck != '' else (
+        'no' if (
+          ansible_facts.distribution_version.startswith('8.1.') or ansible_facts.distribution_version == '8.1' or
+          datadog_yum_repo != ''
+        ) else 'yes'
+      ) }}
 
 - name: Download current RPM key
   get_url:
@@ -49,6 +62,7 @@
     description: Datadog, Inc.
     baseurl: "{{ datadog_agent5_yum_repo }}"
     enabled: yes
+    repo_gpgcheck: no  # we don't sign Agent 5 repodata
     gpgcheck: "{{ datadog_yum_gpgcheck }}"
     gpgkey: [
       "{{ datadog_yum_gpgkey_current }}",
@@ -65,6 +79,7 @@
     description: Datadog, Inc.
     baseurl: "{{ datadog_agent6_yum_repo }}"
     enabled: yes
+    repo_gpgcheck: "{{ do_yum_repo_gpgcheck }}"
     gpgcheck: "{{ datadog_yum_gpgcheck }}"
     gpgkey: [
       "{{ datadog_yum_gpgkey_current }}",
@@ -81,6 +96,7 @@
     description: Datadog, Inc.
     baseurl: "{{ datadog_agent7_yum_repo }}"
     enabled: yes
+    repo_gpgcheck: "{{ do_yum_repo_gpgcheck }}"
     gpgcheck: "{{ datadog_yum_gpgcheck }}"
     gpgkey: [
       "{{ datadog_yum_gpgkey_current }}",
@@ -96,6 +112,7 @@
     description: Datadog, Inc.
     baseurl: "{{ datadog_yum_repo }}"
     enabled: yes
+    repo_gpgcheck: "{{ do_yum_repo_gpgcheck }}"
     gpgcheck: "{{ datadog_yum_gpgcheck }}"
     gpgkey: [
       "{{ datadog_yum_gpgkey_current }}",

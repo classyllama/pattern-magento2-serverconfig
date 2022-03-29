@@ -58,6 +58,10 @@
   fail: msg="mysqld_replication_master and mysqld_replication_slave cannot both be yes"
   when: mysqld_replication_master and mysqld_replication_slave
 
+- name: fail when mysqld_innodb_buffer_pool_size calculates to 0
+  fail: msg="innodb_buffer_pool_size gets calculated to {{ mysqld_innodb_buffer_pool_size }}"
+  when: mysqld_innodb_buffer_pool_size == "0M" or mysqld_innodb_buffer_pool_size == "0G"
+
 - name: configure mysqld
   template:
     src: my.cnf
@@ -84,7 +88,7 @@
 
 - name: start mysql service
   service:
-    name: mysql
+    name: "{{ mysqld_service_name }}"
     state: started
     enabled: yes
   ignore_errors: "{{ ansible_check_mode }}"

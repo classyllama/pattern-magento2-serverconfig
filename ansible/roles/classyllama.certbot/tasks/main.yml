@@ -36,23 +36,27 @@
     name: snapd.socket
     enabled: true
     state: started
+  ignore_errors: "{{ ansible_check_mode }}"
 
 - name: Enable classic snap support.
   file:
     src: /var/lib/snapd/snap
     dest: /snap
     state: link
+  ignore_errors: "{{ ansible_check_mode }}"
 
 - name: Install certbot via snap.
   snap:
     name: certbot
     classic: true
+  ignore_errors: "{{ ansible_check_mode }}"
 
 - name: Symlink certbot into place.
   file:
     src: /snap/bin/certbot
     dest: /usr/bin/certbot
     state: link
+  ignore_errors: "{{ ansible_check_mode }}"
 
 - name: create certbot webroot
   file: path={{ certbot_webroot_path }} state=directory
@@ -76,6 +80,14 @@
     group: root
   notify: reload nginx
   register: configure_result
+
+- name: create certbot deploy-directory
+  file:
+    path: /etc/letsencrypt/renewal-hooks/deploy/
+    owner: root
+    group: root
+    mode: 0700
+    state: directory
 
 - name: configure reload on renewal
   template:

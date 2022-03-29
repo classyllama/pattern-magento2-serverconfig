@@ -1,6 +1,71 @@
 CHANGELOG
 =========
 
+# 4.14.0 / 2022-02-08
+
+* [FEATURE] Add tasks for creating custom Python checks. See [#408]. Thanks [@snorlaX-sleeps].
+* [FEATURE] Support Rocky Linux and AlmaLinux. See [#418].
+* [BUGFIX] Fix provisioning on Python 3 / Amazon Linux 2. See [#412]. Thanks [@moleskin-smile].
+* [BUGFIX] Prevent dependency on `ansible.windows` with non-Windows nodes. See [#416].
+* [BUGFIX] Don't display content of `DDAGENTUSER_PASSWORD` for Windows nodes. See [#415].
+* [BUGFIX] Additional fixes for `jinja2_native = True` setting. See [#414].
+
+# 4.13.0 / 2022-01-21
+
+* [FEATURE] Add datadog_manage_config to disable changing the Agent config files. See [#375].
+* [BUGFIX] Fix error: dict object has no attribute 'system'. See [#409]. Thanks [@stegar123].
+
+# 4.12.0 / 2021-11-03
+
+* [FEATURE] Add Cloud Workload Security Agent configuration. See [#375]. Thanks [@alsmola].
+* [IMPROVEMENT] Avoid usage of `ansible_lsb` to not depend on `lsb-release` package on Debian. See [#377].
+* [IMPROVEMENT] Check that `datadog_checks` is a mapping to avoid misconfiguration. See [#384]. Thanks [@soar].
+* [IMPROVEMENT] Enable turning off the Agent 6.14 fix for Windows. See [#399].
+* [DOCS] Mention limitations in enabling NPM on Windows. See [#396].
+* [BUGFIX] Fix execution with `jinja2_native = True`. See [#383]. Thanks [@soar].
+
+# 4.11.0 / 2021-07-05
+
+* [IMPROVEMENT] Install datadog-signing-keys package on Debian/Ubuntu. See [#372].
+* [IMPROVEMENT] Skip install on Linux systems when pinned version is already installed. See [#371].
+* [IMPROVEMENT] Update 'http' URLs to 'https' wherever possible. See [#369].Thanks [@rossigee].
+* [BUGFIX] Detect existing version in check mode on Windows. See [#364]. Thanks [@camjay].
+
+# 4.10.0 / 2021-05-25
+
+* [IMPROVEMENT] Make Windows package download behavior in check mode consistent with Linux. See [#359]. Thanks [@camjay].
+* [BUGFIX] Remove `indentfirst` in system-probe.yaml.j2, making the role compatible with Jinja2 >= 3. See [#361]. Thanks [@tasktop-teho].
+* [BUGFIX] Ensure gnupg is installed on Debian/Ubuntu. See [#358].
+
+# 4.9.0 / 2021-05-06
+
+* [IMPROVEMENT] Improvements for APT keys management. See [#351].
+  * By default, get keys from keys.datadoghq.com, not the Ubuntu keyserver.
+  * Always add the `DATADOG_APT_KEY_CURRENT.public` key (contains key used to sign current repodata).
+  * Add `signed-by` option to all sources list lines.
+  * On Debian >= 9 and Ubuntu >= 16, only add keys to `/usr/share/keyrings/datadog-archive-keyring.gpg`.
+  * On older systems, also add the same keyring to `/etc/apt/trusted.gpg.d`.
+* [BUGFIX] Don't set `repo_gpgcheck=1` by default on RHEL/CentOS 8.1 and on custom repos. See [#352].
+* [BUGFIX] Change RPM key URLs to non-SNI versions to ensure the role continues to work with Python <= 2.7.9. See [#353].
+* [DOCS] Add a note about installing marketplace integrations. See [#354].
+
+# 4.8.2 / 2021-04-21
+
+* [BUGFIX] Another fix for agent not restarting after a configuration change on Windows. See [#349].
+
+# 4.8.1 / 2021-04-19
+
+* [BUGFIX] Fix Agent not restarting after a configuration change on Windows. See [#347].
+
+# 4.8.0 / 2021-04-13
+
+* [FEATURE] Add NPM support for Windows. See [#335].
+* [IMPROVEMENT] Split Windows handler into its own file, so we don't include anything from ansible.windows on non-Windows; add a note about the dependency on `ansible.windows`. See [#337].
+* [IMPROVEMENT] Turn on `repo_gpgcheck` on RPM repositories by default. See [#341].
+* [IMPROVEMENT] Align Windows agent to Linux so that service is disabled when `datadog_enabled` is `false`. See [#338]. Thanks [@erikhjensen].
+* [BUGFIX] Fix system-probe enablement conditions. See [#336].
+* [CHORE] Fix issues found by linter (fix file permissions, add `role_name` and `namespace` to `galaxy_info`, remove pre/post tasks). See [#340].
+
 # 4.7.1 / 2021-03-23
 
 * [BUGFIX] Revert addition of NPM support for Windows, which introduced multiple issues. See [#333].
@@ -81,7 +146,7 @@ CHANGELOG
 * [BUGFIX] Fix system-probe.yaml.j2 indent filter. See [#240][]
 * [BUGFIX] Fix sysprobe service detection for systemd services. See [#242][]
 * [OTHER] Improve ansible-galaxy score by following best practices. See [#236][]
-* [OTHER] Include names for `include_tasks`. See [#226][]. Thanks to [@the-real-cphilips][].
+* [OTHER] Include names for `include_tasks`. See [#226][]. Thanks to [@the-real-cphillips][].
 
 # 4.0.0 / 2019-12-18
 
@@ -285,14 +350,44 @@ Initial release, compatible with Ansible v1 & v2
 [#326]: https://github.com/DataDog/ansible-datadog/issues/326
 [#327]: https://github.com/DataDog/ansible-datadog/issues/327
 [#333]: https://github.com/DataDog/ansible-datadog/issues/333
+[#335]: https://github.com/DataDog/ansible-datadog/issues/335
+[#336]: https://github.com/DataDog/ansible-datadog/issues/336
+[#337]: https://github.com/DataDog/ansible-datadog/issues/337
+[#338]: https://github.com/DataDog/ansible-datadog/issues/338
+[#340]: https://github.com/DataDog/ansible-datadog/issues/340
+[#341]: https://github.com/DataDog/ansible-datadog/issues/341
+[#347]: https://github.com/DataDog/ansible-datadog/issues/347
+[#349]: https://github.com/DataDog/ansible-datadog/issues/349
+[#351]: https://github.com/DataDog/ansible-datadog/issues/351
+[#352]: https://github.com/DataDog/ansible-datadog/issues/352
+[#353]: https://github.com/DataDog/ansible-datadog/issues/353
+[#354]: https://github.com/DataDog/ansible-datadog/issues/354
+[#358]: https://github.com/DataDog/ansible-datadog/issues/358
+[#359]: https://github.com/DataDog/ansible-datadog/issues/359
+[#361]: https://github.com/DataDog/ansible-datadog/issues/361
+[#362]: https://github.com/DataDog/ansible-datadog/issues/362
+[#364]: https://github.com/DataDog/ansible-datadog/issues/364
+[#369]: https://github.com/DataDog/ansible-datadog/issues/369
+[#371]: https://github.com/DataDog/ansible-datadog/issues/371
+[#372]: https://github.com/DataDog/ansible-datadog/issues/372
+[#375]: https://github.com/DataDog/ansible-datadog/issues/375
+[#377]: https://github.com/DataDog/ansible-datadog/issues/377
+[#383]: https://github.com/DataDog/ansible-datadog/issues/383
+[#384]: https://github.com/DataDog/ansible-datadog/issues/384
+[#396]: https://github.com/DataDog/ansible-datadog/issues/396
+[#399]: https://github.com/DataDog/ansible-datadog/issues/399
+[#409]: https://github.com/DataDog/ansible-datadog/issues/409
 [@DevKyleS]: https://github.com/DevKyleS
 [@Jno21]: https://github.com/Jno21
+[@alsmola]: https://github.com/alsmola
 [@b2jrock]: https://github.com/b2jrock
 [@brendanlong]: https://github.com/brendanlong
+[@camjay]: https://github.com/camjay
 [@dbr1993]: https://github.com/dbr1993
 [@dv9io0o]: https://github.com/dv9io0o
 [@enarciso]: https://github.com/enarciso
 [@eplanet]: https://github.com/eplanet
+[@erikhjensen]: https://github.com/erikhjensen
 [@geoffwright]: https://github.com/geoffwright
 [@gtrummell]: https://github.com/gtrummell
 [@jeffwidman]: https://github.com/jeffwidman
@@ -303,8 +398,12 @@ Initial release, compatible with Ansible v1 & v2
 [@loliee]: https://github.com/loliee
 [@pdecat]: https://github.com/pdecat
 [@pmbauer]: https://github.com/pmbauer
+[@rossigee]: https://github.com/rossigee
 [@rouge8]: https://github.com/rouge8
 [@samasc30]: https://github.com/samasc30
-[@the-real-cphilips]: https://github.com/the-real-cphilips
+[@soar]: https://github.com/soar
+[@stegar123]: https://github.com/stegar123
+[@tasktop-teho]: https://github.com/tasktop-teho
+[@the-real-cphillips]: https://github.com/the-real-cphillips
 [@tomgoren]: https://github.com/tomgoren
 [@xp-1000]: https://github.com/xp-1000

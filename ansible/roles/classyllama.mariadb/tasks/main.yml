@@ -1,5 +1,8 @@
 ---
 
+- debug:
+    var: mariadb_version
+
 - name: Install MariaDB Client/Server
   package:
     name: "{{ item }}"
@@ -29,6 +32,11 @@
     path: "{{ mysqld_tmpdir }}"
   register: mysqld_tmpdir_stat
 
+- name: Check for existing pid_dir
+  stat:
+    path: "{{ mysqld_pid_dir }}"
+  register: mysqld_pid_dir_stat
+
 - name: create mysqld tmpdir
   file:
     path: "{{ mysqld_tmpdir }}"
@@ -37,6 +45,19 @@
     group: mysql
     mode: 0775
   when: mysqld_create_tmpdir or not mysqld_tmpdir_stat.stat.exists
+
+- name: fail when mysqld_innodb_buffer_pool_size calculates to 0
+  fail: msg="innodb_buffer_pool_size gets calculated to {{ mysqld_innodb_buffer_pool_size }}"
+  when: mysqld_innodb_buffer_pool_size == "0M" or mysqld_innodb_buffer_pool_size == "0G"
+
+- name: create mysqld pid_dir
+  file:
+    path: "{{ mysqld_pid_dir }}"
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: 0775
+  when: not mysqld_pid_dir_stat.stat.exists
 
 - name: configure mysqld
   template:
@@ -73,9 +94,23 @@
     mode: 0775
   when: not mysqld_log_dir_stat.stat.exists
 
+- name: Check for existing datadir/mysql
+  stat:
+    path: "{{ mysqld_datadir }}/mysql"
+  register: mysqld_datadir_mysql_stat
+
+- name: initialize "{{ mysqld_datadir }}" for MariaDB 10.4
+  command: /bin/mysql_install_db --datadir={{ mysqld_datadir }}
+  become: true
+  become_user: mysql
+  when:
+    - mysqld_datadir != mysqld_default_datadir
+    - mariadb_version is version("10.3", '>=')
+    - not mysqld_datadir_mysql_stat.stat.exists
+
 - name: start mariadb service
   service:
-    name: mariadb
+    name: "{{ mysqld_service_name }}"
     state: started
     enabled: yes
 

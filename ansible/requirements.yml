@@ -100,7 +100,11 @@ roles:
   - src: git@github.com:classyllama/ansible-role-repo-nginx-appstream.git
     name: classyllama.repo-nginx-appstream
     scm: git
-  
+
+  - src: git@github.com:classyllama/ansible-role-repo-mariadb.git
+    name: classyllama.repo-mariadb
+    scm: git
+
   - src: git@github.com:classyllama/ansible-role-repo-ius.git
     name: classyllama.repo_ius
     scm: git

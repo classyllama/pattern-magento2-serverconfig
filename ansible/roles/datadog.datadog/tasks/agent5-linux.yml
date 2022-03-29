@@ -3,6 +3,8 @@
   file:
     dest: /etc/dd-agent
     state: directory
+    mode: 0755
+  when: datadog_manage_config
 
 - name: (agent5) Create main Datadog agent configuration file
   template:
@@ -10,6 +12,8 @@
     dest: /etc/dd-agent/datadog.conf
     owner: "{{ datadog_user }}"
     group: "{{ datadog_group }}"
+    mode: 0644 #FIXME: should have permissions set to only be readable by owner
+  when: datadog_manage_config
   notify: restart datadog-agent
 
 - name: (agent5) Ensure datadog-agent is running
@@ -33,7 +37,7 @@
     - "*.yaml"
     file_type: file
   register: datadog_conf_files
-  when: datadog_disable_untracked_checks
+  when: datadog_manage_config and datadog_disable_untracked_checks
 
 - name: Register all checks files present in datadog
   find:
@@ -42,14 +46,14 @@
     - "*.yaml.default"
     file_type: file
   register: datadog_conf_files_default
-  when: datadog_disable_default_checks
+  when: datadog_manage_config and datadog_disable_default_checks
 
 - name: Delete checks not present in datadog_tracked_checks
   file:
     path: "/etc/dd-agent/conf.d/{{ item }}.yaml"
     state: absent
   loop: "{{ datadog_conf_files.files | map(attribute='path') | list | map('basename') | list | map('regex_replace', '^(.*).yaml$', '\\1') | list }}"
-  when: datadog_disable_untracked_checks and item not in datadog_tracked_checks
+  when: datadog_manage_config and datadog_disable_untracked_checks and item not in datadog_tracked_checks
   notify: restart datadog-agent
 
 - name: Delete default checks
@@ -58,7 +62,7 @@
     state: absent
   loop: "{{ datadog_conf_files_default.files | map(attribute='path') | list
              | map('basename') | list | map('regex_replace', '^(.*).yaml.default$', '\\1') | list }}"
-  when: datadog_disable_default_checks and item not in datadog_tracked_checks
+  when: datadog_manage_config and datadog_disable_default_checks and item not in datadog_tracked_checks
   notify: restart datadog-agent
 
 - name: (agent5) Create a configuration file for each Datadog check
@@ -67,12 +71,7 @@
     dest: "/etc/dd-agent/conf.d/{{ item }}.yaml"
     owner: "{{ datadog_user }}"
     group: "{{ datadog_group }}"
+    mode: 0644 #FIXME: should have permissions set to only be readable by owner
   with_items: "{{ datadog_checks|list }}"
+  when: datadog_manage_config
   notify: restart datadog-agent
-
-- name: Create installation information file
-  template:
-    src: install_info.j2
-    dest: /etc/dd-agent/install_info
-    owner: "{{ datadog_user }}"
-    group: "{{ datadog_group }}"

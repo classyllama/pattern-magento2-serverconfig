@@ -1,18 +1,19 @@
 - hosts: all
   roles:
-    - { role: ansible-datadog, become: yes }  # On Ansible < 1.9, use `sudo: yes` instead of `become: yes`
+    - { role: ../../ansible-datadog, become: yes }  # On Ansible < 1.9, use `sudo: yes` instead of `become: yes`
   vars:
     datadog_agent_major_version: 6
     datadog_api_key: "123456"
     datadog_agent_allow_downgrade: true
     system_probe_config:
-      enabled: true
       source_excludes:
         "*":
           - 8301
       dest_excludes:
         "*":
           - 8301
+    network_config:
+      enabled: true
     datadog_config:
       tags: "mytag0, mytag1"
       log_level: INFO

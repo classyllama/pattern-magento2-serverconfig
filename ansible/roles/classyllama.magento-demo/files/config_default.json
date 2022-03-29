@@ -1,22 +1,31 @@
 {
   "CONFIG_NAME": "example",
   "SITE_HOSTNAME": "example.lan",
+  "SITE_ADMIN_DOMAIN": "example.lan",
   "ENV_ROOT_DIR": "/var/www/data",
   "MAGENTO_ROOT_DIR": "/var/www/data/magento",
+  "MAGENTO_BACKEND_FRONTNAME": "",
+  "MAGENTO_DEMONOTICE": "1",
   
   
   
   "SITE_ROOT_DIR": "current",
 
   "MAGENTO_COMPOSER_PROJECT": "magento/project-community-edition",
-  "MAGENTO_REL_VER": "2.4.0",
-  
+  "MAGENTO_REL_VER": "2.4.3",
+  "MAGENTO_DEPLOY_MODE": "production",
+  "MAGENTO_FPC": "varnish",
+
   "REDIS_OBJ_HOST": "localhost",
   "REDIS_OBJ_PORT": "6379",
   "REDIS_OBJ_DB": "0",
   "REDIS_SES_HOST": "localhost",
   "REDIS_SES_PORT": "6379",
   "REDIS_SES_DB": "1",
+  "REDIS_SES_MAX_CONCURRENCY": "30",
+  "REDIS_SES_BREAK_AFTER_FRONT": "15",
+  "REDIS_SES_BREAK_AFTER_ADMIN": "30",
+  "REDIS_SES_DISABLE_LOCKING": "0",
   "REDIS_FPC_HOST": "localhost",
   "REDIS_FPC_PORT": "6379",
   "REDIS_FPC_DB": "2",
@@ -33,8 +42,15 @@
   "ELASTIC_INDEX_PREFIX": "data_magento2",
   
   "SHOULD_SETUP_SAMPLE_DATA": "true",
+  "SHOULD_SETUP_VENIA_SAMPLE_DATA": "false",
+  "VENIA_SAMPLE_DATA_VERSION": "12.0.0",
+  "VENIA_SAMPLE_DATA_FROM": "ARTIFACT",
+  "SHOULD_USE_CUSTOM_ADMIN_DOMAIN": "false",
   "SHOULD_RUN_CUSTOM_SCRIPT": "false",
   "SHOULD_SETUP_TFA": "false",
   
-  "PHP_MEMORY_LIMIT": "4096M"
+  "PHP_MEMORY_LIMIT": "4096M",
+  
+  "LOCK_DB_PREFIX": "data",
+  "N98_MAGERUN2_BIN": "mr"
 }

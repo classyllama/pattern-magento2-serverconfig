@@ -16,3 +16,7 @@ magento_demo_config_overrides: {}
 #   MAGENTO_REL_VER: 2.4.0
 #   SHOULD_SETUP_SAMPLE_DATA: false
 #   SHOULD_RUN_CUSTOM_SCRIPT: true
+#   REDIS_SES_DISABLE_LOCKING: 1 # it might be useful for PWA installation with a lot of concurrent AJAX calls
+
+
+magento_demo_files: []

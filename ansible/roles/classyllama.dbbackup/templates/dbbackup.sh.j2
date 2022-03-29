@@ -30,7 +30,7 @@ for DATABASE in ${DATABASES}; do
          --routines \
          --events \
          --no-data \
-         --dump-date \
+         --dump-date {{ dbbackup_schema_dump_options }} \
          ${DATABASE} | \
      gzip > ${DUMP_DIRECTORY}/${TIMESTAMP}_${DATABASE}_schema.sql.gz
 
@@ -39,7 +39,7 @@ for DATABASE in ${DATABASES}; do
          --single-transaction \
          --no-create-info \
          --no-create-db \
-         --dump-date \
+         --dump-date {{ dbbackup_data_dump_options }} \
          ${DATABASE} | \
      gzip > ${DUMP_DIRECTORY}/${TIMESTAMP}_${DATABASE}_data.sql.gz
 done

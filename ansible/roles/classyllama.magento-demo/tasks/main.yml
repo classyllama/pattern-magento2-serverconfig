@@ -36,3 +36,12 @@
     owner: "{{ magento_demo_user }}"
     group: "{{ magento_demo_group }}"
     mode: 0640
+
+- name: Copy Magento Demo other Files
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ magento_demo_scripts_dir }}/{{ item.dest }}"
+    owner: "{{ magento_demo_user }}"
+    group: "{{ magento_demo_group }}"
+    mode: 0640
+  with_items: "{{ magento_demo_files }}"
