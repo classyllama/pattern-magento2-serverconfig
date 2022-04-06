@@ -12,5 +12,8 @@
 - ansible.builtin.import_playbook: playbooks/multiredis.yml
   when: inventory_hostname in groups['redis']
 
-- ansible.builtin.import_playbook: playbooks/datadog.yml
-  when: inventory_hostname in groups['datadog']
+- ansible.builtin.import_playbook: playbooks/datadog-web.yml
+  when: inventory_hostname in groups['datadog-web']
+
+- ansible.builtin.import_playbook: playbooks/datadog-db.yml
+  when: inventory_hostname in groups['datadog-db']

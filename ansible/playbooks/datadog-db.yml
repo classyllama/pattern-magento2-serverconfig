@@ -1,6 +1,6 @@
 ---
 - name: Datadog
-  hosts: all
+  hosts: datadog-db
   become: true
 
   tasks:

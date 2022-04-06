@@ -1,0 +1,10 @@
+---
+- name: Datadog
+  hosts: datadog-web
+  become: true
+
+  tasks:
+    - ansible.builtin.import_role:
+         name: datadog.datadog
+      tags: datadog
+      when: use_datadog_datadog | default(false)
